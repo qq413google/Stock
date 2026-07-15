@@ -1,0 +1,19 @@
+# 缓存（API 拉取的数据，每次可重新生成）
+cache/backtest/
+cache/intraday/
+
+# 平台私有不提交
+.workbuddy/
+node_modules/
+
+# 盯盘运行时状态（自动生成）
+tasks/alerts-state.json
+
+# 盯盘日志（自动生成）
+tasks/alerts.log
+tasks/*.log
+tasks/*-watchlist.log
+
+# OS
+.DS_Store
+Thumbs.db
