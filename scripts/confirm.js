@@ -109,13 +109,23 @@ async function getJson(u) {
   // 超跌反包 PASS: 非多头 但 站回MA20 + 当天主力净占比>=+10%(强反转) -> PASS 轻仓
   // (回测83笔: 站回MA20+净占比≥10% 期望+9.28% vs 主力流出-0.59%; 放量是主力买,故不受放量WAIT限制)
   const reboundBuy = !bull && price > ma20 && todayRatio !== null && todayRatio >= 10 && main > 0;
+
+  // 买点距离检查(2026-07-16新增，照搬backtest/studies.js已回测验证的buyPoints()/strictBuy()定义，非新判断):
+  // 顺势回踩买要求现价贴近MA10(±2%以内)，且止损距离(min(MA20,现价*0.97))不超过4%——
+  // 光看"没破MA10"不够，价格已经反弹离MA10很远时不算真正的回踩点(紫光国微/恒瑞医药/药明康德/中兴通讯都撞过这个漏洞)。
+  const nearMa10 = Math.abs(price - ma10) / ma10 <= 0.02;
+  const stopRef = Math.min(ma20, price * 0.97);
+  const stopDist = (price - stopRef) / price;
+  const validStopDist = stopDist > 0 && stopDist <= 0.04;
+  const atBuyPoint = nearMa10 && validStopDist;
+
   let verdict;
   if (main === null || !idOk) verdict = 'WAIT';           // 资金缺失/恒等式失败 -> 不据此下结论
   else if (!cMa10 || main <= OUT) verdict = 'FAIL';       // 破MA10 或 明显流出 -> 别接
   else if (rsi !== null && rsi > 70) verdict = 'WAIT';    // RSI超买 -> 风险收益差(回测+0.50 vs+2.63),两路径都拦
-  else if (reboundBuy) verdict = 'PASS';                  // 超跌反包(站回MA20+净占比≥10%) -> 轻仓
+  else if (reboundBuy) verdict = 'PASS';                  // 超跌反包(站回MA20+净占比≥10%) -> 轻仓，买点定义不同，不受nearMa10限制
   else if (volRatio > 1.5) verdict = 'WAIT';              // 顺势路径: 放量需人工分辨突破/砸盘
-  else if (main > 0 && bull) verdict = 'PASS';            // 顺势回踩: 主力转正+守MA10+缩量+多头
+  else if (main > 0 && bull) verdict = atBuyPoint ? 'PASS' : 'WAIT'; // 顺势回踩: 主力转正+守MA10+缩量+多头，且必须贴近MA10+止损距离达标才是真买点，否则是追高
   else verdict = 'WAIT';                                  // 主力未明确转正(近0)/非多头且非反包 -> 等
   // 注:「5日暴量派发未修复」回测仅弱支持(+2.35 vs +1.67, 拦掉52%且被拦者仍为正, 且窗口含暴跌被污染)
   //     -> 只作展示提醒, 不硬性改判 verdict, 交人工/Claude 结合MACD/RSI/位置权衡。
@@ -127,6 +137,10 @@ async function getJson(u) {
   console.log(`${mk(cMain)} 主力: ${mainTxt}${idOk ? '' : ' 恒等式失败!'}`);
   console.log(`${mk(cVol)} 量能: 今日/5日均量=${volRatio.toFixed(2)} ${volTxt} (盘中为部分量,参考)`);
   console.log(`${mk(cMa10)} 均线: 现价${price.toFixed(2)} / MA10 ${ma10.toFixed(2)} ${cMa10 ? '未破' : '已破!'} | ${bull ? '多头排列' : '非多头'}`);
+  if (!reboundBuy) {
+    const distPct = ((price - ma10) / ma10 * 100).toFixed(1);
+    console.log(`${mk(atBuyPoint)} 买点: 离MA10${distPct >= 0 ? '+' : ''}${distPct}%(${nearMa10 ? '贴近' : '偏远,非回踩点'}) 止损距离${(stopDist * 100).toFixed(1)}%(${validStopDist ? '达标' : '过宽'})`);
+  }
   const rsiOb = rsi !== null && rsi > 70;
   console.log(`${rsiOb ? '[X]' : '[OK]'} 强弱: RSI=${rsi === null ? 'NA' : rsi.toFixed(0)}${rsiOb ? ' 超买 -> 回踩买风险差,等冷却(回测已验证)' : ''}`);
   let f5mark, f5txt;
@@ -157,12 +171,13 @@ async function getJson(u) {
     price, main, superL, largeL, todayRatio, volRatio, verdict,
   });
 
-  const tip = verdict === 'PASS' ? (reboundBuy ? '超跌反包候选(站回MA20+主力净占比≥10%) -> 轻仓试,找我定手数/止损' : '顺势三项通过 -> 可考虑,找我定手数/止损/盈亏比')
+  const tip = verdict === 'PASS' ? (reboundBuy ? '超跌反包候选(站回MA20+主力净占比≥10%) -> 轻仓试,找我定手数/止损' : '顺势三项通过+已贴近MA10买点 -> 可考虑,找我定手数/止损/盈亏比')
     : verdict === 'FAIL' ? '主力流出或破MA10 -> 别接,放弃今天'
     : verdict === 'ERR' ? '数据拉取失败 -> 找我手动确认'
+    : (!reboundBuy && main > 0 && bull && !atBuyPoint) ? `三项本身通过，但现价离MA10${nearMa10 ? '' : '偏远'}/止损距离${validStopDist ? '' : '过宽'}，不是真正回踩点，追高风险大 -> 等回踩MA10再看`
     : '未全过/放量 -> 谨慎,建议找我人工判断';
   console.log(`结论: ${tip}`);
   // ASCII 兜底两行（编码异常也可读，且供 PowerShell 解析）
-  console.log(`SUMMARY main=${main === null ? 'NA' : main.toFixed(2)} vol=${volRatio.toFixed(2)} holdMA10=${cMa10 ? 'Y' : 'N'} bull=${bull ? 'Y' : 'N'} rsi=${rsi === null ? 'NA' : rsi.toFixed(0)} ratio=${todayRatio === null ? 'NA' : todayRatio.toFixed(1)} rebound=${reboundBuy ? 'Y' : 'N'} sum5=${sum5 === null ? 'NA' : sum5.toFixed(1)} worst=${worst === null ? 'NA' : worst.toFixed(1)} recover=${recovering ? 'Y' : 'N'} streak=${streak}`);
+  console.log(`SUMMARY main=${main === null ? 'NA' : main.toFixed(2)} vol=${volRatio.toFixed(2)} holdMA10=${cMa10 ? 'Y' : 'N'} bull=${bull ? 'Y' : 'N'} rsi=${rsi === null ? 'NA' : rsi.toFixed(0)} ratio=${todayRatio === null ? 'NA' : todayRatio.toFixed(1)} rebound=${reboundBuy ? 'Y' : 'N'} sum5=${sum5 === null ? 'NA' : sum5.toFixed(1)} worst=${worst === null ? 'NA' : worst.toFixed(1)} recover=${recovering ? 'Y' : 'N'} streak=${streak} nearMa10=${nearMa10 ? 'Y' : 'N'} stopDist=${(stopDist * 100).toFixed(1)}`);
   console.log(`VERDICT: ${verdict} (${passN}/3)`);
 })();
