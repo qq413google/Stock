@@ -117,7 +117,13 @@ foreach ($a in $alerts) {
     if ($null -eq $price) { continue }
     $thr = [double]$a.price
     $isArmed = if ($armed.ContainsKey($code)) { $armed[$code] }
-               elseif ($a.op -eq '>') { $price -le $thr }   # 收复触发: 仅当价已≤支撑(在下方待反弹)时才"待发"; 价在支撑上方时不误弹
+               elseif ($a.op -eq '>') {
+                   # Seed "armed" from prevClose, not the current instant price (2026-07-22 lesson:
+                   # a fast limit-up open can already be past thr by the first poll of the day,
+                   # which used to be misread as "already fired" and silenced the alert all day).
+                   # prevClose <= thr means today is a fresh cross -> should be armed.
+                   if ($prevMap.ContainsKey($code)) { $prevMap[$code] -le $thr } else { $price -le $thr }
+               }
                else { $true }
     $wasPassed = if ($passed.ContainsKey($code)) { $passed[$code] } else { $false }
     $hit = switch ($a.op) {

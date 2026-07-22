@@ -119,6 +119,13 @@ async function getJson(u) {
   const validStopDist = stopDist > 0 && stopDist <= 0.04;
   const atBuyPoint = nearMa10 && validStopDist;
 
+  // ⚠️ 已知未修复漏洞(2026-07-20 药明康德实例，见 AGENTS.md 硬性警告第6条/策略共识九)：
+  // nearMa10 判的是"空间条件"(现价与MA10的距离)，不是买点定义里隐含的"时空条件"(在该位置
+  // 企稳/走平一段时间)。下跌途中路过MA10 也满足空间条件，但不是回踩企稳，atBuyPoint 分不清两者。
+  // 本次实例：7/15见顶131.5放量→7/16、7/17连续2日主力净流出10日累计-3.46亿、放量破MA20→
+  // 7/20分时10:11见高124.78后单边下滑，10:13(main=2.39/ratio5.9%)脚本判PASS，但10:27仍在创新低。
+  // TODO(未实现)：atBuyPoint 应再叠加 (a) 近3日K线方向非连续放量下跌 (b) 当前分钟是否仍创新低，
+  // 而不能只判定"距离MA10够近"。在此修复前，人工使用时必须额外现拉 trends.js 核实分时是否真止跌。
   let verdict;
   if (main === null || !idOk) verdict = 'WAIT';           // 资金缺失/恒等式失败 -> 不据此下结论
   else if (!cMa10 || main <= OUT) verdict = 'FAIL';       // 破MA10 或 明显流出 -> 别接
