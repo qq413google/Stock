@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "strategy_name": "TQQQ/SPY 宏观战术配置",
+    "symbol": "TQQQ,SPY",
+    "start": "2014-01-01",
+    "end": "2026-07-13",
+    "initial_cash": 100000.0,
+    "window_start_value": 98969.87,
+    "final_value": 2476733.42,
+    "market": "us_stock",
+    "generated_at": "2026-07-15T21:35:38+08:00"
+  },
+  "summary": {
+    "total_return_pct": 2402.5125525576623,
+    "annual_return_pct": 29.40205548376076,
+    "max_drawdown_pct": 47.22185279598,
+    "sharpe": 0.9017073559223073,
+    "win_rate_pct": 82.22222222222221,
+    "total_trades": 45
+  }
+}

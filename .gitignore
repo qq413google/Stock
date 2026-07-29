@@ -14,6 +14,17 @@ tasks/alerts.log
 tasks/*.log
 tasks/*-watchlist.log
 
+# 独立 dashboard 工程（归属存疑/疑似他处生成，暂不纳入版本控制，留原地）
+dashboard_template.html
+dashboard_locales.py
+render_dashboard.py
+export_results.py
+index.html
+
+# 其他工具留下的碎文件
+_git_push_result.txt
+_pwsh_test.txt
+
 # OS
 .DS_Store
 Thumbs.db
