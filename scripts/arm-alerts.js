@@ -75,9 +75,17 @@ const ma = (kl, i, n) => kl.slice(i - n + 1, i + 1).reduce((a, b) => a + b.c, 0)
     if (kl.length < 61) { skipped.push(`${s.name}(数据不足)`); continue; }
     const i = kl.length - 1;
     const c = kl[i].c, m10 = ma(kl, i, 10), m20 = ma(kl, i, 20), m60 = ma(kl, i, 60);
+    // 2026-07-22教训: kl[i].c 在盘中重跑时是"今天实时价"(东财日K线接口开盘后当天这根会实时更新),
+    // 不是"昨收"——5%禁买线的基准必须用真正收盘完的前一天(kl[i-1]),不能用 kl[i].c，
+    // 否则9:30自动布防还大致准，但盘中手动重跑时(价已经涨上去了)基准会被污染，等于没检查。
+    const prevC = kl[i - 1].c;
     // 超跌反包候选: 收盘<=MA20(超跌) -> 布"站回MA20"触发,confirm按主力净占比判(回测:站回MA20+净占比≥10% 期望+9.28%)
     if (c <= m20) {
       if (m20 > PRICE_CAP) { skipped.push(`${s.name}(MA20 ${m20.toFixed(0)}>180超价)`); continue; }
+      // 中兴通讯教训: 暴跌后MA20是滞后指标,跌得越狠MA20离现价越远;
+      // 若MA20本身已经隐含相对昨收>5%涨幅,这条触发线一旦真的碰到就必然撞上
+      // "当日涨>5%"硬性禁买线,永远不可能产生合法买点,不该布防(等昨收回升到差距<5%再说)。
+      if (m20 > prevC * 1.05) { skipped.push(`${s.name}(MA20 ${m20.toFixed(2)} 较昨收${prevC.toFixed(2)}已超5%,站回即撞禁买线,不布)`); continue; }
       auto.push({
         name: s.name, tencent: s.tencent, op: '>', price: +m20.toFixed(2),
         msg: `站回MA20(${m20.toFixed(2)}) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)`,
@@ -89,6 +97,7 @@ const ma = (kl, i, n) => kl.slice(i - n + 1, i + 1).reduce((a, b) => a + b.c, 0)
     const support = c > m10 ? m10 : m20;
     const supName = c > m10 ? 'MA10' : 'MA20';
     if (support > PRICE_CAP) { skipped.push(`${s.name}(支撑${support.toFixed(0)}>180超价)`); continue; }
+    if (support > prevC * 1.05) { skipped.push(`${s.name}(支撑${support.toFixed(2)}较昨收${prevC.toFixed(2)}已超5%,收复即撞禁买线,不布)`); continue; }
     const price = +support.toFixed(2);
     const trig = {
       name: s.name, tencent: s.tencent, op: '>', price,
