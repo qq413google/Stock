@@ -85,6 +85,9 @@ if (-not $Test) {
     if ($armMark -ne $curWin) {
         $armJs = Join-Path $root 'scripts\arm-alerts.js'
         if (Test-Path $armJs) { try { & node $armJs | Out-Null } catch {} }
+        # v2.6: after refreshing watchlist BUY watches, arm holding STOP/trailing/add alerts from positions.json
+        $posJs = Join-Path $root 'scripts\arm-positions.js'
+        if (Test-Path $posJs) { try { & node $posJs | Out-Null } catch {} }
         $armMark = $curWin
     }
 }
@@ -149,7 +152,7 @@ foreach ($a in $alerts) {
     # price-edge entry fire (heads-up). Confirm alerts are gated to PASS below, so they do NOT
     # pop on a raw price touch -- only the 3-check PASS verdict pops (no "falling-knife" popups).
     if ($hit -and $isArmed -and -not $a.confirm) {
-        $hits += [pscustomobject]@{ name = $a.name; price = $price; msg = $a.msg; text = $(if ($confObj) { $confObj.text } else { '' }) }
+        $hits += [pscustomobject]@{ name = $a.name; price = $price; msg = $a.msg; text = $(if ($confObj) { $confObj.text } else { '' }); sell = [bool]$a.sell }
         $armed[$code] = $false
     }
     elseif ($reset) {
@@ -162,7 +165,7 @@ foreach ($a in $alerts) {
     # verdict-edge PASS fire (only once per dip): the moment 3-check turns PASS
     $passedNow = $wasPassed
     if ($confObj -and $confObj.verdict -eq 'PASS' -and -not $wasPassed) {
-        $hits += [pscustomobject]@{ name = $a.name; price = $price; msg = 'PASS - 3-check all green -> consider buy, ping me'; text = $confObj.text }
+        $hits += [pscustomobject]@{ name = $a.name; price = $price; msg = 'PASS - 3-check all green -> consider buy, ping me'; text = $confObj.text; sell = $false }
         $passedNow = $true
     }
     if ($reset) { $passedNow = $false }
@@ -177,7 +180,7 @@ foreach ($a in $alerts) {
 if ($Test) {
     Write-Host ("[regime] 3-idx avg {0}%  crashGate={1}  crashMode(in)={2}" -f ([math]::Round($avgIdx, 2)), $crashGate, $crashMode)
     if ($hits.Count -gt 0) {
-        Write-Host "--- WOULD FIRE $($hits.Count)$(if ($crashGate) { ' -- SILENCED by crash gate' }) (test mode: no popup/log/state/refresh) ---"
+        Write-Host "--- WOULD FIRE $($hits.Count)$(if ($crashGate) { ' -- crash gate: BUY silenced, SELL/STOP still fires' }) (test mode: no popup/log/state/refresh) ---"
         $hits | ForEach-Object { Write-Host ("{0} {1} - {2}" -f $_.name, $_.price, $_.msg) }
     } else { Write-Host "--- no NEW crossing ---" }
     exit 0
@@ -191,10 +194,14 @@ elseif ($crashMode -and $avgIdx -ge 0.8 -and (@($idxPct | Where-Object { $_ -gt 
 # Persist state FIRST (before any blocking popup) so overlapping runs dedup correctly.
 @{ date = $today; armed = $armed; passed = $passed; arm = $armMark; crashMode = $crashMode } | ConvertTo-Json -Compress | Out-File -FilePath $stateFile -Encoding utf8
 
-# Market crashing (3-idx avg <= -1.5%) -> silence: 0% territory, all pullback-buys are knives. Log once, no popup.
+# Market crashing (3-idx avg <= -1.5%) -> silence BUY/pullback alerts (all knives in a crash). Log once, no popup.
+# v2.6 fix: a crash is EXACTLY when a stop-loss must still ping -> SELL/STOP alerts (sell=true) are NOT silenced.
 if ($crashGate) {
-    if ($hits.Count -gt 0) { "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] CRASH-SILENCE (3idx avg $([math]::Round($avgIdx, 2))%): suppressed $($hits.Count) pullback alerts" | Out-File -FilePath $logFile -Append -Encoding utf8 }
-    exit 0
+    $buyHits = @($hits | Where-Object { -not $_.sell })
+    $sellHits = @($hits | Where-Object { $_.sell })
+    if ($buyHits.Count -gt 0) { "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] CRASH-SILENCE (3idx avg $([math]::Round($avgIdx, 2))%): suppressed $($buyHits.Count) buy alerts" | Out-File -FilePath $logFile -Append -Encoding utf8 }
+    if ($sellHits.Count -eq 0) { exit 0 }
+    $hits = $sellHits   # only SELL/STOP alerts survive the crash gate -> fall through to popup below
 }
 
 # Market recovery all-clear: first clearly-up day after a crash spell -> ONE popup to re-engage.
@@ -215,7 +222,10 @@ if ($hits.Count -gt 0) {
     $noiseWin = ($hmFire -ge 930 -and $hmFire -lt 1000)
     $body = ($hits | ForEach-Object {
             $line = "$($_.name) $($_.price) - $($_.msg)"
-            if ($_.text) {
+            if ($_.sell) {
+                $line = $line + "`n  >>> STOP/SELL alert -> verify real volume-break vs morning wick, then act per plan (ping Claude)"
+            }
+            elseif ($_.text) {
                 $line = $line + "  [AUTO-CONFIRMED / 3-check ok -> read VERDICT below]`n----- " + $_.name + " 3-check -----`n" + $_.text
             }
             else {

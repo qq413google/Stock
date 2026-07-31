@@ -1,6 +1,6 @@
 {
   "_comment": "自动布防生成(scripts/arm-alerts.js)。每日开盘前重跑刷新。标 manual:true 的条目会被保留。触发=价位到了,买不买仍须过 v2.0 全闸门。",
-  "_generated": "2026-07-31 09:31 (北京)",
+  "_generated": "2026-07-31 13:31 (北京)",
   "alerts": [
     {
       "name": "沪电股份",
@@ -37,48 +37,42 @@
       "track": "MA10"
     },
     {
+      "name": "立讯精密",
+      "tencent": "sz002475",
+      "op": ">",
+      "price": 60.7,
+      "msg": "站回MA20(60.70) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "enabled": true,
+      "confirm": true,
+      "rebound": true
+    },
+    {
+      "name": "德赛西威",
+      "tencent": "sz002920",
+      "op": ">",
+      "price": 84.96,
+      "msg": "反弹收复MA10(84.96) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "enabled": true
+    },
+    {
       "name": "泰格医药[持仓-止损]",
       "tencent": "sz300347",
       "op": "<=",
       "price": 48.02,
-      "msg": "🔴止损线到 - 持仓成本49.80,计划止损48.02(-3.5%)。放量破位即按纪律清仓,不留隔夜(14:50前必处理)。触发=该卖了,ping Claude复核",
+      "msg": "🔴止损线到 - 成本49.8/止损48.02。放量破位或10点后仍在下方即按纪律清,不留隔夜(灾难线-8%=45.82)。触发=该卖,ping Claude复核",
       "enabled": true,
-      "manual": true
+      "posauto": true,
+      "sell": true
     },
     {
       "name": "泰格医药[持仓-加仓观察]",
       "tencent": "sz300347",
       "op": ">",
       "price": 52.29,
-      "msg": "📈浮盈≥5%(成本49.80×1.05=52.29)向上加仓观察 - 仅趋势完好+站稳MA10才金字塔加(减量),严禁向下摊薄。触发=价到了,ping Claude过闸门",
+      "msg": "📈浮盈≥5%(成本×1.05=52.29)加仓观察 - 仅趋势完好+站稳MA10金字塔加(减量),严禁向下摊薄。触发=价到,ping Claude过闸门",
       "enabled": true,
-      "manual": true
-    },
-    {
-      "name": "康龙化成",
-      "tencent": "sz300759",
-      "op": ">",
-      "price": 36.09,
-      "msg": "反弹收复MA20(36.09) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
-      "enabled": true
-    },
-    {
-      "name": "华东医药",
-      "tencent": "sz000963",
-      "op": ">",
-      "price": 29.85,
-      "msg": "站回MA20(29.85) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
-    },
-    {
-      "name": "工商银行",
-      "tencent": "sh601398",
-      "op": ">",
-      "price": 7.8,
-      "msg": "反弹收复MA10(7.8) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
-      "enabled": true
+      "posauto": true
     }
-  ]
+  ],
+  "_posarmed": "2026-07-31 13:31 (北京)"
 }

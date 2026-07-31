@@ -49,6 +49,14 @@ const ma = (kl, i, n) => kl.slice(i - n + 1, i + 1).reduce((a, b) => a + b.c, 0)
   } catch (e) { /* 文件不存在/损坏，忽略 */ }
   const manualCodes = new Set(manual.map(a => a.tencent));
 
+  // 持仓票交给 arm-positions.js 布"止损/移动止损/加仓"，这里不再给它们生成"低吸买入"单
+  // （持有的票不该再挂买入观察）。持仓 代码 是 secid(0.xxx/1.xxx)，转成 tencent 比对。
+  let heldCodes = new Set();
+  try {
+    const pc = JSON.parse(fs.readFileSync(path.join(root, 'positions.json'), 'utf8'));
+    heldCodes = new Set((pc.持仓 || []).map(h => { const [mk, c] = String(h.代码).split('.'); return (mk === '0' ? 'sz' : 'sh') + c; }));
+  } catch (e) { /* 无持仓文件忽略 */ }
+
   const data = [];
   for (const s of wl) { data.push(await getKline(s)); await new Promise(r => setTimeout(r, 150)); }
 
@@ -71,6 +79,7 @@ const ma = (kl, i, n) => kl.slice(i - n + 1, i + 1).reduce((a, b) => a + b.c, 0)
   const skipped = [];
   for (const s of data) {
     if (manualCodes.has(s.tencent)) { skipped.push(`${s.name}(手动钉,跳过自动)`); continue; }
+    if (heldCodes.has(s.tencent)) { skipped.push(`${s.name}(持仓中,交由arm-positions布止损)`); continue; }
     const kl = s.kl;
     if (kl.length < 61) { skipped.push(`${s.name}(数据不足)`); continue; }
     const i = kl.length - 1;
