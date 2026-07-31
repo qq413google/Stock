@@ -1,12 +1,12 @@
 {
   "_comment": "自动布防生成(scripts/arm-alerts.js)。每日开盘前重跑刷新。标 manual:true 的条目会被保留。触发=价位到了,买不买仍须过 v2.0 全闸门。",
-  "_generated": "2026-07-29 13:30 (北京)",
+  "_generated": "2026-07-31 09:31 (北京)",
   "alerts": [
     {
       "name": "沪电股份",
       "tencent": "sz002463",
       "op": "<=",
-      "price": 112.11,
+      "price": 107.12,
       "msg": "回踩买区(MA5 150.5~152) - 6/30机构+16.62亿回补/多头+MACD金叉;缩量止跌+主力续流入=突破回踩买,止损MA10(147),盈亏比~2.7",
       "enabled": false,
       "manual": true,
@@ -18,7 +18,7 @@
       "name": "恒瑞医药",
       "tencent": "sh600276",
       "op": "<=",
-      "price": 55,
+      "price": 54.89,
       "msg": "回踩MA10(54.53)缩量企稳 - 7/10测箱体上沿(57.77)未破,非追高;等回踩确认,止损前低支撑下方",
       "enabled": true,
       "manual": true,
@@ -29,40 +29,12 @@
       "name": "药明康德",
       "tencent": "sh603259",
       "op": "<=",
-      "price": 126.08,
+      "price": 126.44,
       "msg": "回踩MA10(122.38)缩量企稳 - 7/10已反弹3日(115→125+),不追高;等回踩不破再进,资金面7/9前方向反复需再确认",
       "enabled": true,
       "manual": true,
       "confirm": true,
       "track": "MA10"
-    },
-    {
-      "name": "通富微电",
-      "tencent": "sz002156",
-      "op": ">",
-      "price": 70.58,
-      "msg": "站回MA20(70.58) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
-    },
-    {
-      "name": "康龙化成",
-      "tencent": "sz300759",
-      "op": ">",
-      "price": 35.42,
-      "msg": "反弹收复MA20(35.42) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
-      "enabled": true
-    },
-    {
-      "name": "华东医药",
-      "tencent": "sz000963",
-      "op": ">",
-      "price": 29.9,
-      "msg": "站回MA20(29.90) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
     },
     {
       "name": "泰格医药[持仓-止损]",
@@ -83,11 +55,29 @@
       "manual": true
     },
     {
+      "name": "康龙化成",
+      "tencent": "sz300759",
+      "op": ">",
+      "price": 36.09,
+      "msg": "反弹收复MA20(36.09) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "enabled": true
+    },
+    {
+      "name": "华东医药",
+      "tencent": "sz000963",
+      "op": ">",
+      "price": 29.85,
+      "msg": "站回MA20(29.85) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "enabled": true,
+      "confirm": true,
+      "rebound": true
+    },
+    {
       "name": "工商银行",
       "tencent": "sh601398",
       "op": ">",
-      "price": 7.69,
-      "msg": "反弹收复MA10(7.69) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 7.8,
+      "msg": "反弹收复MA10(7.8) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     }
   ]

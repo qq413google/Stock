@@ -208,6 +208,11 @@ if ($allClear) {
 
 if ($hits.Count -gt 0) {
     $ts = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+    # v2.6: 09:30-10:00 is the noisiest window (open auction + overnight imbalance + overseas beta).
+    # A single tick touching a level is a "space event", not a "space-time event" (held for time).
+    # Tag popups fired in this window as LOOK-ONLY so the user does not act on the opening spike.
+    $hmFire = (Get-Date).Hour * 100 + (Get-Date).Minute
+    $noiseWin = ($hmFire -ge 930 -and $hmFire -lt 1000)
     $body = ($hits | ForEach-Object {
             $line = "$($_.name) $($_.price) - $($_.msg)"
             if ($_.text) {
@@ -218,6 +223,13 @@ if ($hits.Count -gt 0) {
             }
             $line
         }) -join "`n"
+    if ($noiseWin) {
+        $banner = "[!] 09:30-10:00 OPEN NOISE WINDOW: price touch = LOOK ONLY, do NOT act on the opening spike." + "`n" +
+                  "    SELL/STOP only if it breaks today's low, OR is still below stop after 10:00." + "`n" +
+                  "    BUY only if the level still holds past 10:00 + confirm." + "`n" +
+                  "    (Exception: -8% disaster line / clear bad-news gap = act immediately.)" + "`n`n"
+        $body = $banner + $body
+    }
     "[$ts]`n$body" | Out-File -FilePath $logFile -Append -Encoding utf8
     switch ($AlertMode) {
         'popup' {
