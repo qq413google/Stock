@@ -274,6 +274,8 @@
 ## 十二、工具支撑（让规则可执行）
 
 - `scripts/market.js` → 市场状态分级（驱动总仓位上限）
+- `scripts/overseas.js` → 隔夜外盘 beta 环境（纳指/标普/道指 + 半导体篮子代理费半）；**仅环境校准，不做买入理由**（第六·补节红线）
+- `scripts/arm-positions.js` → 读 `positions.json` 自动布防持仓的硬止损/移动止损MA10/加仓观察（sell:true 崩盘日不被静音）
 - `scripts/positions.js` → 读 `positions.json`，实时校验持仓 -8%硬顶/止损价/集中度（≤3只、单赛道≤50%）
 - `scripts/flow.js <secid>` → 当日主力资金（实时接口）+ **当日"主力净流出"禁买判定**
 - `scripts/flow.js <secid> <days>` → 历史多日资金流（daykline接口，N日明细+主力净占比%+恒等式校验）+ **连续N日净流出趋势判定**（截至上一交易日收盘）

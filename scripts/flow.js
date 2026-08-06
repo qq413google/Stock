@@ -21,23 +21,47 @@ if (!secid) {
 if (days <= 1) {
   // 单日：实时接口
   const url = `https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?secid=${secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58&lmt=1&klt=101`;
-  fetch(url).then(r => r.json()).then(d => {
-    if (!d.data || !d.data.klines || !d.data.klines.length) {
-      console.error('No data'); process.exit(1);
+  // 成交额(f48)用于"量级校验"——恒等式抓不到整体×10这类scale错误(10a=10b+10c仍成立),
+  // 但净占比(主力/成交额)会飙到离谱,可抓出来。带重试+Connection:close(规避undici连坏socket)。
+  const qUrl = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f48,f58`;
+  const getJson = async (u) => {
+    for (let i = 0; i < 4; i++) {
+      try { const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0', 'Connection': 'close' } }).then(x => x.json()); if (r && r.data) return r; } catch (e) { /* retry */ }
+      await new Promise(s => setTimeout(s, 400 * (i + 1)));
     }
-    const line = d.data.klines[d.data.klines.length - 1];
-    const p = line.split(',');
+    return null;
+  };
+  (async () => {
+    const d = await getJson(url);
+    if (!d || !d.data || !d.data.klines || !d.data.klines.length) { console.error('No data'); process.exit(1); }
+    const p = d.data.klines[d.data.klines.length - 1].split(',');
     const main = +p[1] / 1e8, small = +p[2] / 1e8, medium = +p[3] / 1e8, large = +p[4] / 1e8, superL = +p[5] / 1e8;
-    // 恒等式校验
-    const err = Math.abs(main - (superL + large));
-    const pass = err < 0.01;
-    console.log(`${d.data.name} 资金流向(亿): 主力=${main.toFixed(2)} 超大单=${superL.toFixed(2)} 大单=${large.toFixed(2)} 中单=${medium.toFixed(2)} 小单=${small.toFixed(2)} | 恒等式${pass ? '✅' : '🔴误差=' + err.toFixed(4)}`);
+    // 恒等式1: 主力 = 超大 + 大
+    const err1 = Math.abs(main - (superL + large)), pass1 = err1 < 0.01;
+    // 恒等式2: 超大 + 大 + 中 + 小 = 0 (四类净额闭合;实测全成立,能抓到更多字段错位)
+    const err2 = Math.abs(superL + large + medium + small), pass2 = err2 < 0.01;
+    const idOk = pass1 && pass2;
+    console.log(`${d.data.name} 资金流向(亿): 主力=${main.toFixed(2)} 超大单=${superL.toFixed(2)} 大单=${large.toFixed(2)} 中单=${medium.toFixed(2)} 小单=${small.toFixed(2)} | 恒等式${idOk ? '✅' : '🔴'}`);
+    if (!pass1) console.error(`⚠️ 恒等式1(主力=超大+大)失败 误差=${err1.toFixed(4)}`);
+    if (!pass2) console.error(`⚠️ 恒等式2(超大+大+中+小=0)失败 误差=${err2.toFixed(4)} → 疑字段错位/数据bug`);
+    // 量级校验(best-effort): 成交额取到才做,取不到只跳过不报错
+    const q = await getJson(qUrl);
+    if (q && q.data && q.data.f48 != null && +q.data.f48 > 0) {
+      const amt = +q.data.f48 / 1e8;                 // 成交额(亿)
+      const ratio = main / amt * 100;                // 主力净占比%
+      const impossible = Math.abs(main) > amt;       // 净额>成交额=物理上不可能
+      const magBad = Math.abs(ratio) > 60;           // 净占比>60%极罕见
+      console.log(`量级校验: 成交额${amt.toFixed(2)}亿 主力净占比${ratio >= 0 ? '+' : ''}${ratio.toFixed(1)}% ${impossible ? '🔴净额>成交额,不可能→数据错(疑×10/错位)' : magBad ? '🔴净占比>60%异常,存疑' : '✅合理'}`);
+      if (impossible || magBad) console.error('⚠️ 量级校验异常,数据可能有bug,暂停据此判断！');
+    } else {
+      console.log('量级校验: 成交额未取到 → 跳过(仅恒等式已过)');
+    }
     // 禁买清单"主力当日净流出"自动判定（实时口径，今日盘中）
     console.log(main < 0
       ? `🔴 禁买判定: 当日主力净流出 ${main.toFixed(2)}亿 → 触发禁买清单"主力净流出"，不接`
       : `✅ 当日主力净流入 ${main.toFixed(2)}亿 → 该项禁买不触发`);
-    if (!pass) console.error('⚠️ 恒等式校验失败，数据可能有bug，暂停使用！');
-  });
+    if (!idOk) console.error('⚠️ 恒等式校验失败，数据可能有bug，暂停使用！');
+  })();
 } else {
   // 多日：历史接口
   const url = `https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?secid=${secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58&lmt=${days}&klt=101`;
