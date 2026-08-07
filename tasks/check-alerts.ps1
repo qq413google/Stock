@@ -119,7 +119,12 @@ foreach ($a in $alerts) {
     $price = $priceMap[$code]
     if ($null -eq $price) { continue }
     $thr = [double]$a.price
-    $isArmed = if ($armed.ContainsKey($code)) { $armed[$code] }
+    # 2026-08-07 fix: armed/passed state MUST be keyed per-alert, not per-stock.
+    # With arm-positions a stock carries several alerts (stop/add/trail) sharing one tencent
+    # code; a shared flag let one alert's re-arm branch re-arm ANOTHER alert every cycle
+    # (add-watch popped every minute), and one alert's fire could silence a sibling stop alert.
+    $key = "$code|$($a.name)"
+    $isArmed = if ($armed.ContainsKey($key)) { $armed[$key] }
                elseif ($a.op -eq '>') {
                    # Seed "armed" from prevClose, not the current instant price (2026-07-22 lesson:
                    # a fast limit-up open can already be past thr by the first poll of the day,
@@ -128,7 +133,7 @@ foreach ($a in $alerts) {
                    if ($prevMap.ContainsKey($code)) { $prevMap[$code] -le $thr } else { $price -le $thr }
                }
                else { $true }
-    $wasPassed = if ($passed.ContainsKey($code)) { $passed[$code] } else { $false }
+    $wasPassed = if ($passed.ContainsKey($key)) { $passed[$key] } else { $false }
     $hit = switch ($a.op) {
         '>=' { $price -ge $thr }
         '<=' { $price -le $thr }
@@ -153,13 +158,13 @@ foreach ($a in $alerts) {
     # pop on a raw price touch -- only the 3-check PASS verdict pops (no "falling-knife" popups).
     if ($hit -and $isArmed -and -not $a.confirm) {
         $hits += [pscustomobject]@{ name = $a.name; price = $price; msg = $a.msg; text = $(if ($confObj) { $confObj.text } else { '' }); sell = [bool]$a.sell }
-        $armed[$code] = $false
+        $armed[$key] = $false
     }
     elseif ($reset) {
-        $armed[$code] = $true
+        $armed[$key] = $true
     }
     else {
-        $armed[$code] = $isArmed
+        $armed[$key] = $isArmed
     }
 
     # verdict-edge PASS fire (only once per dip): the moment 3-check turns PASS
@@ -169,10 +174,10 @@ foreach ($a in $alerts) {
         $passedNow = $true
     }
     if ($reset) { $passedNow = $false }
-    $passed[$code] = $passedNow
+    $passed[$key] = $passedNow
 
     if ($Test) {
-        $arm = if ($armed[$code]) { 'armed' } else { 'fired/parked' }
+        $arm = if ($armed[$key]) { 'armed' } else { 'fired/parked' }
         Write-Host ("{0} {1} price={2} cond {3}{4} hit={5} -> {6}" -f $a.name, $code, $price, $a.op, $thr, $hit, $arm)
     }
 }

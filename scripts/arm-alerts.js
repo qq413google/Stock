@@ -41,11 +41,14 @@ async function getKline(s) {
 const ma = (kl, i, n) => kl.slice(i - n + 1, i + 1).reduce((a, b) => a + b.c, 0) / n;
 
 (async () => {
-  // 保留手动钉的触发器
+  // 保留手动钉的触发器 + arm-positions 生成的持仓止损/加仓线(posauto)。
+  // 2026-08-07教训: 此前只留 manual, 单独手跑本脚本会把持仓止损触发器整批冲掉
+  // (蓝思建仓当天真实发生过,持仓裸奔~2分钟)。posauto 条目由 arm-positions 自行去重刷新,
+  // 这里保留不会重复,只会防止"手动刷新买入布防"顺手拆掉卖出保护。
   let manual = [];
   try {
     const prev = JSON.parse(fs.readFileSync(alertsFile, 'utf8'));
-    manual = (prev.alerts || []).filter(a => a.manual === true);
+    manual = (prev.alerts || []).filter(a => a.manual === true || a.posauto === true);
   } catch (e) { /* 文件不存在/损坏，忽略 */ }
   const manualCodes = new Set(manual.map(a => a.tencent));
 
