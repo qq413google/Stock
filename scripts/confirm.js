@@ -45,6 +45,7 @@ cleanOldCache();
 const kUrl = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=70`;
 const fUrl = `https://push2.eastmoney.com/api/qt/stock/fflow/kline/get?secid=${secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58&lmt=1&klt=101`;
 const dkUrl = `https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?secid=${secid}&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57,f58&lmt=6&klt=101`;
+const tUrl = `https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=${secid}&fields1=f1,f2,f3,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58&iscr=0&ndays=1`;
 
 async function getJson(u) {
   for (let i = 0; i < 4; i++) {
@@ -55,7 +56,7 @@ async function getJson(u) {
 }
 
 (async () => {
-  const [k, f, dk] = await Promise.all([getJson(kUrl), getJson(fUrl), getJson(dkUrl)]);
+  const [k, f, dk, t] = await Promise.all([getJson(kUrl), getJson(fUrl), getJson(dkUrl), getJson(tUrl)]);
   if (!k || !k.data || !k.data.klines || k.data.klines.length < 20) {
     console.log('SUMMARY kline-fail'); console.log('VERDICT: ERR'); return;
   }
@@ -66,8 +67,44 @@ async function getJson(u) {
   const price = closes[n - 1];
   const ma = p => closes.slice(-p).reduce((a, b) => a + b, 0) / p;
   const ma5 = ma(5), ma10 = ma(10), ma20 = ma(20), ma60 = n >= 60 ? ma(60) : NaN;
-  const volMa5 = vols.slice(-5).reduce((a, b) => a + b, 0) / 5;
-  const volRatio = vols[n - 1] / volMa5;
+  // ---------- 时空治本 v2.9 (2026-08-07): 时钟/交易时段判定 ----------
+  const bjD = new Date(Date.now() + 8 * 3600 * 1000);
+  const hm = bjD.getUTCHours() * 100 + bjD.getUTCMinutes();
+  const wd = bjD.getUTCDay();
+  const inSession = wd >= 1 && wd <= 5 && ((hm >= 930 && hm <= 1130) || (hm >= 1300 && hm <= 1500));
+  const noiseWin = inSession && hm < 1000;                  // 开盘噪声窗 9:30-9:59 (v2.6)
+  // 已完结K线的下标: 盘中时 kline 最后一根是实时的(2026-07-22教训), 完结日要退一根
+  const lastDone = inSession ? n - 2 : n - 1;
+  // 盘中量能折算: 今日部分量按已交易分钟占比放大, 修正"盘中必显缩量"的失真(#5洞之一);
+  // 5日均量也只用已完结日, 不让今日部分量拉低分母
+  function elapsedFrac() {
+    if (!inSession) return 1;
+    let mins;
+    if (hm >= 1300) mins = 120 + (Math.floor(hm / 100) - 13) * 60 + (hm % 100);
+    else mins = (Math.floor(hm / 100) - 9) * 60 + (hm % 100) - 30;
+    return Math.max(0.12, Math.min(1, mins / 240));
+  }
+  const volMa5 = vols.slice(lastDone - 4, lastDone + 1).reduce((a, b) => a + b, 0) / 5;
+  const volProj = vols[n - 1] / elapsedFrac();
+  const volRatio = volProj / volMa5;
+  // 近3日方向(药明7/20教训: 均线多头是被更早大涨拉高的滞后信号, 掩盖实际破位下跌):
+  // 已完结的近3根连跌 且 3日累计跌幅≥5% → 判为破位型下跌, 顺势"回踩"不成立
+  const c0 = closes[lastDone], c1 = closes[lastDone - 1], c2 = closes[lastDone - 2], c3 = closes[lastDone - 3];
+  const downtrend3 = (c0 < c1 && c1 < c2) && ((c0 - c3) / c3 <= -0.05);
+  // 分时企稳判定(时空条件的核心): 近10分钟未再创当日新低 且 (站回均价线 或 离当日低点≥0.8%)
+  // 数据拉不到 → null, 下方判 WAIT(宁可漏不乱PASS, 与"资金缺失→WAIT"同哲学)
+  let intra = null;
+  if (t && t.data && t.data.trends && t.data.trends.length >= 5) {
+    const bars = t.data.trends.map(L => { const p = L.split(','); return { c: +p[2], l: +p[4], vwap: +p[7] }; });
+    const lastBar = bars[bars.length - 1];
+    const sessionLow = Math.min(...bars.map(b => b.l));
+    const recentLow = Math.min(...bars.slice(-10).map(b => b.l));
+    const priorLow = bars.length > 10 ? Math.min(...bars.slice(0, -10).map(b => b.l)) : sessionLow;
+    const newLowRecent = recentLow < priorLow - 1e-9;
+    const offLow = (lastBar.c - sessionLow) / sessionLow;
+    const aboveVwap = lastBar.c >= lastBar.vwap * 0.998;
+    intra = { stab: !newLowRecent && (aboveVwap || offLow >= 0.008), newLowRecent, offLow, aboveVwap, vwap: lastBar.vwap };
+  }
   let rsi = null;
   if (n >= 15) { let g = 0, l = 0; for (let x = n - 14; x < n; x++) { const ch = closes[x] - closes[x - 1]; if (ch > 0) g += ch; else l += -ch; } const ag = g / 14, al = l / 14; rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al); }
   const name = k.data.name || secid;
@@ -119,21 +156,25 @@ async function getJson(u) {
   const validStopDist = stopDist > 0 && stopDist <= 0.04;
   const atBuyPoint = nearMa10 && validStopDist;
 
-  // ⚠️ 已知未修复漏洞(2026-07-20 药明康德实例，见 AGENTS.md 硬性警告第6条/策略共识九)：
-  // nearMa10 判的是"空间条件"(现价与MA10的距离)，不是买点定义里隐含的"时空条件"(在该位置
-  // 企稳/走平一段时间)。下跌途中路过MA10 也满足空间条件，但不是回踩企稳，atBuyPoint 分不清两者。
-  // 本次实例：7/15见顶131.5放量→7/16、7/17连续2日主力净流出10日累计-3.46亿、放量破MA20→
-  // 7/20分时10:11见高124.78后单边下滑，10:13(main=2.39/ratio5.9%)脚本判PASS，但10:27仍在创新低。
-  // TODO(未实现)：atBuyPoint 应再叠加 (a) 近3日K线方向非连续放量下跌 (b) 当前分钟是否仍创新低，
-  // 而不能只判定"距离MA10够近"。在此修复前，人工使用时必须额外现拉 trends.js 核实分时是否真止跌。
+  // ✅ 时空条件已实现(v2.9, 2026-08-07治本; 原TODO见git历史)——药明7/20教训:
+  // nearMa10 只判"空间条件"(距MA10近), 分不清"回踩企稳"和"下跌路过"。现叠加:
+  //   (a) downtrend3: 已完结近3根连跌且≥5% → 破位型下跌, 顺势回踩不给PASS(滞后均线掩盖不了了)
+  //   (b) intra.stab: 分时近10分钟不创当日新低+站回均价线/离开低点 → 未企稳一律WAIT(两路径都拦)
+  //   (c) noiseWin: 盘中9:30-9:59的PASS降级WAIT(v2.6焊进代码), 10点后每轮自动复测,转PASS时ps1自动弹
+  // 分时拉取失败 → WAIT(宁可漏不乱PASS)。2026-08-07蓝思实例: 9:36盘中PASS当时价36.03,
+  // 9:47即砸到35.60仍创新低——本修复后该时刻会因 intra.stab=false 判 WAIT, 10:00后企稳才转PASS。
+  let noiseCapped = false;
   let verdict;
   if (main === null || !idOk) verdict = 'WAIT';           // 资金缺失/恒等式失败 -> 不据此下结论
   else if (!cMa10 || main <= OUT) verdict = 'FAIL';       // 破MA10 或 明显流出 -> 别接
   else if (rsi !== null && rsi > 70) verdict = 'WAIT';    // RSI超买 -> 风险收益差(回测+0.50 vs+2.63),两路径都拦
-  else if (reboundBuy) verdict = 'PASS';                  // 超跌反包(站回MA20+净占比≥10%) -> 轻仓，买点定义不同，不受nearMa10限制
-  else if (volRatio > 1.5) verdict = 'WAIT';              // 顺势路径: 放量需人工分辨突破/砸盘
-  else if (main > 0 && bull) verdict = atBuyPoint ? 'PASS' : 'WAIT'; // 顺势回踩: 主力转正+守MA10+缩量+多头，且必须贴近MA10+止损距离达标才是真买点，否则是追高
+  else if (intra === null) verdict = 'WAIT';              // 分时缺失 -> 时空无法确认,不给PASS
+  else if (!intra.stab) verdict = 'WAIT';                 // 未企稳(还在创新低/贴当日低点+均价线下) -> 下跌路过,不接
+  else if (reboundBuy) verdict = 'PASS';                  // 超跌反包(站回MA20+净占比≥10%+分时已企稳) -> 轻仓
+  else if (volRatio > 1.5) verdict = 'WAIT';              // 顺势路径: 放量(折算后)需人工分辨突破/砸盘
+  else if (main > 0 && bull) verdict = (downtrend3 ? false : atBuyPoint) ? 'PASS' : 'WAIT'; // 顺势回踩: 近3日非破位下跌+贴近MA10+止损距离达标
   else verdict = 'WAIT';                                  // 主力未明确转正(近0)/非多头且非反包 -> 等
+  if (verdict === 'PASS' && noiseWin) { verdict = 'WAIT'; noiseCapped = true; } // 噪声窗内不发PASS
   // 注:「5日暴量派发未修复」回测仅弱支持(+2.35 vs +1.67, 拦掉52%且被拦者仍为正, 且窗口含暴跌被污染)
   //     -> 只作展示提醒, 不硬性改判 verdict, 交人工/Claude 结合MACD/RSI/位置权衡。
 
@@ -142,7 +183,15 @@ async function getJson(u) {
   console.log(`${name} 现价${price.toFixed(2)} 回踩买点确认:`);
   const mainTxt = main === null ? '数据缺失' : (main.toFixed(2) + '亿(净占比' + (todayRatio === null ? 'NA' : (todayRatio >= 0 ? '+' : '') + todayRatio.toFixed(1) + '%') + ') ' + (main > 0 ? '净流入' : main <= OUT ? '净流出' : '近0未转正'));
   console.log(`${mk(cMain)} 主力: ${mainTxt}${idOk ? '' : ' 恒等式失败!'}`);
-  console.log(`${mk(cVol)} 量能: 今日/5日均量=${volRatio.toFixed(2)} ${volTxt} (盘中为部分量,参考)`);
+  console.log(`${mk(cVol)} 量能: 今日(折算)/5日均量=${volRatio.toFixed(2)} ${volTxt}${inSession ? ' (按已交易时段折算全天)' : ''}`);
+  if (intra === null) {
+    console.log(`[?] 时空: 分时数据未取到 -> 无法确认企稳,不给PASS(人工拉 trends.js 核实)`);
+  } else {
+    const stTxt = `离当日低+${(intra.offLow * 100).toFixed(1)}% | 均价线${intra.aboveVwap ? '上' : '下'}(${intra.vwap.toFixed(2)}) | 近10分钟${intra.newLowRecent ? '仍创新低!' : '未创新低'}`;
+    console.log(`${mk(intra.stab)} 时空: ${intra.stab ? '分时已企稳' : '未企稳(下跌路过,不是回踩)'} - ${stTxt}`);
+  }
+  if (downtrend3) console.log(`[X] 方向: 已完结近3日连跌且累计${(((closes[lastDone] - closes[lastDone - 3]) / closes[lastDone - 3]) * 100).toFixed(1)}% -> 破位型下跌,均线多头是滞后假象,顺势回踩不成立`);
+  if (noiseCapped) console.log(`[~] 噪声窗: 9:30-10:00内条件虽满足,PASS暂扣为WAIT(v2.6),10点后自动复测转PASS会自动弹`);
   console.log(`${mk(cMa10)} 均线: 现价${price.toFixed(2)} / MA10 ${ma10.toFixed(2)} ${cMa10 ? '未破' : '已破!'} | ${bull ? '多头排列' : '非多头'}`);
   if (!reboundBuy) {
     const distPct = ((price - ma10) / ma10 * 100).toFixed(1);
@@ -178,13 +227,17 @@ async function getJson(u) {
     price, main, superL, largeL, todayRatio, volRatio, verdict,
   });
 
-  const tip = verdict === 'PASS' ? (reboundBuy ? '超跌反包候选(站回MA20+主力净占比≥10%) -> 轻仓试,找我定手数/止损' : '顺势三项通过+已贴近MA10买点 -> 可考虑,找我定手数/止损/盈亏比')
+  const tip = verdict === 'PASS' ? (reboundBuy ? '超跌反包候选(站回MA20+主力净占比≥10%+分时企稳) -> 轻仓试,找我定手数/止损' : '顺势三项通过+贴近MA10+分时企稳 -> 可考虑,找我定手数/止损/盈亏比')
     : verdict === 'FAIL' ? '主力流出或破MA10 -> 别接,放弃今天'
     : verdict === 'ERR' ? '数据拉取失败 -> 找我手动确认'
+    : noiseCapped ? '条件已满足但在开盘噪声窗(9:30-10:00)内 -> 只看不动,10点后自动复测转PASS会再弹'
+    : (intra !== null && !intra.stab) ? '分时未企稳(还在创新低/贴当日低点) -> 下跌路过不是回踩,等止跌走平再说'
+    : intra === null ? '分时数据缺失,时空无法确认 -> 找我人工拉trends核实'
+    : (downtrend3 && !reboundBuy && main > 0 && bull) ? '近3日连跌破位型,均线多头是滞后假象 -> 非回踩,别接'
     : (!reboundBuy && main > 0 && bull && !atBuyPoint) ? `三项本身通过，但现价离MA10${nearMa10 ? '' : '偏远'}/止损距离${validStopDist ? '' : '过宽'}，不是真正回踩点，追高风险大 -> 等回踩MA10再看`
     : '未全过/放量 -> 谨慎,建议找我人工判断';
   console.log(`结论: ${tip}`);
   // ASCII 兜底两行（编码异常也可读，且供 PowerShell 解析）
-  console.log(`SUMMARY main=${main === null ? 'NA' : main.toFixed(2)} vol=${volRatio.toFixed(2)} holdMA10=${cMa10 ? 'Y' : 'N'} bull=${bull ? 'Y' : 'N'} rsi=${rsi === null ? 'NA' : rsi.toFixed(0)} ratio=${todayRatio === null ? 'NA' : todayRatio.toFixed(1)} rebound=${reboundBuy ? 'Y' : 'N'} sum5=${sum5 === null ? 'NA' : sum5.toFixed(1)} worst=${worst === null ? 'NA' : worst.toFixed(1)} recover=${recovering ? 'Y' : 'N'} streak=${streak} nearMa10=${nearMa10 ? 'Y' : 'N'} stopDist=${(stopDist * 100).toFixed(1)}`);
+  console.log(`SUMMARY main=${main === null ? 'NA' : main.toFixed(2)} vol=${volRatio.toFixed(2)} holdMA10=${cMa10 ? 'Y' : 'N'} bull=${bull ? 'Y' : 'N'} rsi=${rsi === null ? 'NA' : rsi.toFixed(0)} ratio=${todayRatio === null ? 'NA' : todayRatio.toFixed(1)} rebound=${reboundBuy ? 'Y' : 'N'} sum5=${sum5 === null ? 'NA' : sum5.toFixed(1)} worst=${worst === null ? 'NA' : worst.toFixed(1)} recover=${recovering ? 'Y' : 'N'} streak=${streak} nearMa10=${nearMa10 ? 'Y' : 'N'} stopDist=${(stopDist * 100).toFixed(1)} st=${intra === null ? 'NA' : intra.stab ? 'Y' : 'N'} dt3=${downtrend3 ? 'Y' : 'N'} noise=${noiseCapped ? 'Y' : 'N'}`);
   console.log(`VERDICT: ${verdict} (${passN}/3)`);
 })();
