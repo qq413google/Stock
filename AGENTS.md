@@ -44,15 +44,39 @@ D:\AI\workspace\stock\
 │   ├── stats.js           ← 交易复盘统计
 │   ├── events.js          ← 除权除息/解禁/财报
 │   ├── arm-alerts.js      ← 每日自动布防(从watchlist挑票→alerts.json)
-│   └── confirm.js         ← 回踩三项确认(主力/缩量/MA10, 供盯盘调用)
+│   ├── arm-positions.js   ← 持仓自动布防(读positions.json→止损/移动止损/加仓观察)
+│   ├── overseas.js        ← 隔夜外盘beta(纳指/标普/道指+半导体篮子代理费半)
+│   └── confirm.js         ← 回踩三项确认(主力/缩量/MA10+分时企稳+近3日方向, 供盯盘调用)
+├── backtest/              ← 回测引擎(lib.js)与各项研究(studies*.js + results*.json)
+├── cache/                 ← backtest/(回测K线资金流缓存) intraday/(confirm当日快照)
 ├── watchlist.json         ← 自选股池(20只, 手动维护, 不自动变)
 ├── alerts.json            ← 盯盘触发器(arm-alerts每日自动刷新)
 ├── positions.json         ← 当前持仓与账户状态
 ├── trades.json            ← 已平仓交易记录
 ├── events.json            ← 事件日历(手动维护)
-├── tasks/                 ← 零token定时盯盘(check-alerts.ps1每3分钟/run-hidden.vbs/alerts.log)
+├── tasks/                 ← 零token定时盯盘(check-alerts.ps1 每1分钟/run-hidden.vbs/alerts.log/alerts-state.json)
 └── assets/                ← 静态资源
 ```
+
+## 🚦 新接手的 AI：先看这张表（用户说什么 → 你做什么）
+
+> 你的角色：**A股实盘辅助决策助手**。用户是散户（5万本金，当前小仓位实盘验证阶段）。
+> 你的产出永远是「**现拉数据 → 过闸门 → 给带止损/盈亏比的结论**」，不是聊天式意见。
+> **当前持仓/现金看 `positions.json`；已平仓战绩跑 `node scripts/stats.js`。**
+
+| 用户说 | 你做 |
+|---|---|
+| 「今天怎么操作」「现况如何」 | ①`overseas.js`(隔夜外盘beta) ②`market.js`(大盘分级→仓位上限) ③`positions.js`(持仓+触线检查) → 给「持仓怎么办 + 今天能不能出手」；**盘中报价必带时刻**(早上的分级中午就可能失效) |
+| 「XX股票怎么样」「能买吗」 | **反着查，找坑不找勾**：①`kline.js`看近3日方向(排除破位下跌被滞后均线掩盖) ②`trends.js`逐行看分时(排除下跌路过≠企稳) ③`flow.js`(恒等式+量级校验) ④`calc.js` → 过全闸门 → **给不出止损/盈亏比/资金面就说观望** |
+| 「弹窗了」(贴图或转述) | 看弹窗标注：`PASS+AUTO-CONFIRMED`=系统三项过了但**仍须人工三层核实**；`PRICE-ONLY`=只是价到了；`[!]噪声窗`=9:30-10:00只看不动；`[sell]`=止损类**最高优先级**。**一律现拉数据复核，不信弹窗里的旧价** |
+| 「我买了/卖了X」 | ①问准成交价 ②改 `positions.json`(持仓+现金+账本) ③平仓的记 `trades.json`(含守纪律与否+教训) ④跑 `node scripts/arm-positions.js` 重布防 ⑤`node scripts/positions.js` 校验 |
+| 「战绩/复盘」 | `node scripts/stats.js`；**注意看纪律执行率，那才是当前阶段的KPI**，不是盈亏 |
+| 「优化/改规则」 | **先分清这条是[回测验证]还是[逻辑推演]**（硬性警告第7条）；放宽类改动次一交易日生效；想加新信号先查 `策略共识与验证计划.md` 第三节「不要做的事」 |
+| 「为什么涨/跌」 | 可用 WebSearch，但**只复述有出处的，不编叙事**；外盘/新闻**只做环境校准与排雷，绝不做买入理由** |
+
+**每日节奏**：09:25 盘前看外盘 → 09:30-10:00 噪声窗只观察 → 10:00 第一决策点 → 14:50 收盘前必查持仓 → 盘后记账。
+
+---
 
 ## 启动检查清单
 
@@ -145,7 +169,14 @@ node scripts/confirm.js 0.002463
 
 ## 盯盘与每日自动布防（tasks/ + arm-alerts.js + confirm.js）
 
-零 token 的价格盯盘：Windows 定时任务每 3 分钟跑 `tasks/check-alerts.ps1`，碰触发线弹窗。**不耗 token，LLM 只在用户拿弹窗来问时才介入。**
+零 token 的价格盯盘：**Windows 定时任务 `StockAlerts` 每 1 分钟**（2026-08-06 由3分钟改为1分钟，`Interval=PT1M`）跑 `tasks/check-alerts.ps1`，碰触发线弹窗。**不耗 token，LLM 只在用户拿弹窗来问时才介入。**
+
+> 查看/修改定时任务（改 Interval 需**管理员** PowerShell）：
+> ```powershell
+> Get-ScheduledTaskInfo -TaskName "StockAlerts"                          # 看上次运行/结果/下次
+> (Get-ScheduledTask -TaskName "StockAlerts").Triggers[0].Repetition     # 看频率
+> powershell -ExecutionPolicy Bypass -File tasks\check-alerts.ps1 -Test  # dry-run(不弹窗/不写状态)
+> ```
 
 **两层结构：**
 - **自选股池 `watchlist.json`（20 只）**：手动维护，**不自动变**，也不扫全市场。

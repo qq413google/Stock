@@ -29,7 +29,14 @@ scripts/flow.js    <secid> <days> # 历史多日(daykline,主力净占比%+恒�
 scripts/positions.js              # 读positions.json,账户级风控校验
 scripts/stats.js                  # 读trades.json,胜率/盈亏比/纪律统计
 scripts/events.js                 # 读events.json,除权除息/解禁/财报
+scripts/overseas.js               # 隔夜外盘beta(纳指/标普/道指+半导体篮子代理费半);仅环境校准,不做买入理由
+scripts/confirm.js <secid>        # 买点确认:主力/量能(盘中折算)/MA10+分时企稳+近3日方向;噪声窗内PASS降级WAIT
+scripts/arm-alerts.js [--dry]     # 每日自动布防:从watchlist挑票→alerts.json(持仓票交给arm-positions)
+scripts/arm-positions.js [--dry]  # 持仓自动布防:读positions.json→硬止损[sell]/移动止损MA10/加仓观察
 ```
+
+> 盯盘：Windows 定时任务 `StockAlerts` **每1分钟**跑 `tasks/check-alerts.ps1`(零token)，
+> 触发弹窗。dry-run: `powershell -ExecutionPolicy Bypass -File tasks\check-alerts.ps1 -Test`
 
 数据文件（项目根，单一数据源）：`watchlist.json`(自选股) `positions.json`(持仓) `trades.json`(交易记录) `events.json`(事件)
 
@@ -79,7 +86,7 @@ secid格式：深市`0.XXXXXX`，沪市`1.XXXXXX`
 
 ## 风控规则
 
-详见 [references/risk-management.md](references/risk-management.md)（v2.0 为唯一规则源），核心：
+详见 [references/risk-management.md](references/risk-management.md) —— **它是唯一规则源，下面只是摘要；两者冲突时以规则文件为准**（本文件的摘要可能滞后，别拿摘要当依据）。核心：
 
 **仓位（先定止损→反推仓位）**
 - 中低价股：单笔风险 = 账户 1.5%（~750元），可买金额 = 750 / 止损距离%
@@ -96,8 +103,14 @@ secid格式：深市`0.XXXXXX`，沪市`1.XXXXXX`
 - 盈亏比 = (目标位-买入价)/(买入价-止损价)，**≥2:1 才做**
 
 **加仓（仅向上加，禁摊薄）**
-- 浮盈≥5%+趋势完好才加，突破/回踩不破加，金字塔减量，止损上移保本
-- 严禁向下补仓摊薄
+- 浮盈≥5%+趋势完好才加，金字塔减量，单票限1次；严禁向下补仓摊薄
+- 加仓**豁免**「当日涨>5%」禁买(v2.8)
+- **止损口径=维持原止损+移动止损跟MA10**(v2.9)；~~加仓后整体止损≥保本位~~ 已被回测研究K证伪废止
+- 形态：突破前高确认 或 回踩不破企稳；走突破形态**限价挂突破位上方等回踩，禁在冲高处接**(v2.9b)
+
+**开盘30分钟噪声窗（v2.6）**
+- 9:30–10:00 只观察不动手；**卖**需「跌破当日最低」或「10点后仍在止损下方」；**买**需价位扛过10:00+confirm
+- 例外：-8%灾难线 / 基本面利空跳空 → 开盘即执行
 
 **止盈（让利润奔跑）**
 - 趋势票用移动止损（跌破MA10/前低才走），震荡票到目标位分批
