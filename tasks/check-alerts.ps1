@@ -30,6 +30,31 @@ $alertsFile = Join-Path $root 'alerts.json'
 $logFile = Join-Path $PSScriptRoot 'alerts.log'
 $stateFile = Join-Path $PSScriptRoot 'alerts-state.json'
 
+# Audio alert, tiered by urgency. Played BEFORE the (blocking) MessageBox so it is heard
+# even when the popup opens behind other windows. Wrapped in try/catch: a machine with no
+# audio device must never break the alert pipeline (the popup+log still fire).
+#   urgent = a [sell] stop-loss alert is among the hits -> loud, unmistakable
+#   normal = buy-watch / PASS heads-up                  -> soft two-tone
+function Play-AlertSound([bool]$urgent) {
+    try {
+        if ($urgent) {
+            [System.Media.SystemSounds]::Hand.Play()        # system "critical" chime
+            Start-Sleep -Milliseconds 250
+            for ($r = 0; $r -lt 2; $r++) {                  # 2 rounds of 3 sharp high beeps
+                1..3 | ForEach-Object { [console]::beep(1175, 160) }
+                Start-Sleep -Milliseconds 130
+            }
+        }
+        else {
+            [System.Media.SystemSounds]::Asterisk.Play()    # system "notify" chime
+            Start-Sleep -Milliseconds 200
+            [console]::beep(659, 130)                       # gentle rising two-tone
+            [console]::beep(880, 220)
+        }
+    }
+    catch { }
+}
+
 # Run scripts/confirm.js (3-check) for a tencent code; return @{ text; verdict }.
 function Get-ConfirmObj($tencent, $root) {
     $res = @{ text = ''; verdict = 'ERR' }
@@ -214,6 +239,7 @@ if ($allClear) {
     $ts = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
     $acMsg = "MARKET ALL-CLEAR: 3-idx avg +$([math]::Round($avgIdx, 2))% (crash paused). Re-engage -> ask Claude to run market.js. NOTE: one up-day != stabilized."
     "[$ts] $acMsg" | Out-File -FilePath $logFile -Append -Encoding utf8
+    Play-AlertSound $false
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show($acMsg, "Market All-Clear $ts", "OK", "Information") | Out-Null
 }
@@ -246,11 +272,17 @@ if ($hits.Count -gt 0) {
         $body = $banner + $body
     }
     "[$ts]`n$body" | Out-File -FilePath $logFile -Append -Encoding utf8
+    # Sound first (non-blocking-ish, ~1-2s), then the blocking popup.
+    # A stop-loss among the hits upgrades the whole batch to the urgent tone.
+    $hasSell = @($hits | Where-Object { $_.sell }).Count -gt 0
+    Play-AlertSound $hasSell
     switch ($AlertMode) {
         'popup' {
             Add-Type -AssemblyName PresentationFramework
-            [System.Windows.MessageBox]::Show($body, "Stock Alert $ts", "OK", "Information") | Out-Null
+            $icon = if ($hasSell) { 'Warning' } else { 'Information' }
+            $title = if ($hasSell) { "STOP/SELL Alert $ts" } else { "Stock Alert $ts" }
+            [System.Windows.MessageBox]::Show($body, $title, "OK", $icon) | Out-Null
         }
-        'sound' { 1..3 | ForEach-Object { [console]::beep(880, 300) } }
+        'sound' { }   # already played above
     }
 }
