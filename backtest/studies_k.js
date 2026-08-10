@@ -161,6 +161,11 @@ function simulateAdd(rows, { addMode = 'none', addForm = 'breakout', maxHold = 6
     { key: 'D_keep', addMode: 'keep', addForm: 'breakout', label: 'D 加仓+原止损不变' },
     { key: 'E_pullback_be', addMode: 'breakeven', addForm: 'pullback', label: 'E 回踩加仓+保本位' },
     { key: 'F_pullback_ma10', addMode: 'ma10', addForm: 'pullback', label: 'F 回踩加仓+MA10止损' },
+    // 2026-08-10 补测: 在已证明最优的"维持原止损"口径下, 对比两种加仓形态——
+    // 用户实盘加在突破当日冲高处(56.70,当日区间69%分位),追问"加仓位置是不是错了",
+    // 需要数据回答"突破当天加 vs 等回踩加"哪个位置更好。
+    { key: 'G_pullback_keep', addMode: 'keep', addForm: 'pullback', label: 'G 回踩加仓+维持原止损' },
+    { key: 'H_both_keep', addMode: 'keep', addForm: 'both', label: 'H 突破或回踩都加+维持原止损' },
   ];
 
   const out = {};
