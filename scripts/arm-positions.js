@@ -66,13 +66,18 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
       enabled: true, posauto: true, sell: true
     });
 
-    // 3. 加仓观察（不依赖网络）
-    const addPx = +(cost * 1.05).toFixed(2);
-    gen.push({
-      name: `${p.标的}[持仓-加仓观察]`, tencent: ten, op: '>', price: addPx,
-      msg: `📈浮盈≥5%(成本×1.05=${addPx})加仓观察 - 仅趋势完好+站稳MA10金字塔加(减量),严禁向下摊薄。触发=价到,ping Claude过闸门`,
-      enabled: true, posauto: true
-    });
+    // 3. 加仓观察（不依赖网络）。v2.8: 单票最多加1次——已加过(已加仓:true)就不再布，
+    //    否则加仓后成本抬高、×1.05 又生成一条新线，会诱导二次加仓(违反金字塔单次原则)。
+    if (p.已加仓 === true) {
+      log.push(`${p.标的} 已加仓过(v2.8单票限1次)→不布加仓观察`);
+    } else {
+      const addPx = +(cost * 1.05).toFixed(2);
+      gen.push({
+        name: `${p.标的}[持仓-加仓观察]`, tencent: ten, op: '>', price: addPx,
+        msg: `📈浮盈≥5%(成本×1.05=${addPx})加仓观察 - 仅趋势完好+站稳MA10金字塔加(减量),严禁向下摊薄。触发=价到,ping Claude过闸门`,
+        enabled: true, posauto: true
+      });
+    }
 
     // 2. 移动止损 MA10（需拉K线；失败只跳过，硬止损已兜底）
     const cl = await getCloses(p.代码);
