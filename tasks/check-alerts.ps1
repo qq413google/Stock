@@ -46,10 +46,17 @@ function Play-AlertSound([bool]$urgent) {
             }
         }
         else {
+            # 2026-08-11: lengthened on user feedback -- the old 2-note ~0.55s chime was too
+            # short to notice when away from the screen. Now a rising 3-note arpeggio x2 (~1.7s),
+            # still clearly softer/lower than the urgent tone so the two stay distinguishable.
             [System.Media.SystemSounds]::Asterisk.Play()    # system "notify" chime
-            Start-Sleep -Milliseconds 200
-            [console]::beep(659, 130)                       # gentle rising two-tone
-            [console]::beep(880, 220)
+            Start-Sleep -Milliseconds 250
+            for ($r = 0; $r -lt 2; $r++) {
+                [console]::beep(659, 180)                   # E5
+                [console]::beep(784, 180)                   # G5
+                [console]::beep(988, 320)                   # B5
+                Start-Sleep -Milliseconds 160
+            }
         }
     }
     catch { }
