@@ -195,22 +195,33 @@
       "name": "泰格医药[持仓-止损]",
       "tencent": "sz300347",
       "op": "<=",
-      "price": 51.04,
-      "msg": "🔴止损线到 - 成本53.25/止损51.04。放量破位或10点后仍在下方即按纪律清,不留隔夜(灾难线-8%=48.99)。触发=该卖,ping Claude复核",
+      "price": 51.49,
+      "msg": "🔴止损线到 - 成本53.25/止损51.49。放量破位或10点后仍在下方即按纪律清,不留隔夜(灾难线-8%=48.99)。触发=该卖,ping Claude复核",
       "enabled": true,
       "posauto": true,
       "sell": true
     },
     {
+      "name": "泰格医药[持仓-冲高回落止盈]",
+      "tencent": "sz300347",
+      "op": "spike",
+      "price": 0,
+      "msg": "📉冲高回落止盈(日内涨>5%后从高点回落>2%,第五节3) - 减半锁利:卖100股,留100股转移动止损。触发=该减仓,ping Claude复核",
+      "enabled": true,
+      "posauto": true,
+      "sell": true,
+      "spikeFade": true
+    },
+    {
       "name": "泰格医药[持仓-移动止损MA10]",
       "tencent": "sz300347",
       "op": "<=",
-      "price": 51.49,
-      "msg": "🟢移动止损:浮盈2.1%,跌破MA10(51.49)离场保利润(趋势票让利润跑到破MA10才走)。触发=ping Claude",
+      "price": 51.52,
+      "msg": "🟢移动止损:浮盈2.7%,跌破MA10(51.52)离场保利润(趋势票让利润跑到破MA10才走)。触发=ping Claude",
       "enabled": true,
       "posauto": true,
       "sell": true
     }
   ],
-  "_posarmed": "2026-08-11 09:43 (北京)"
+  "_posarmed": "2026-08-11 09:49 (北京)"
 }

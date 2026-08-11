@@ -125,11 +125,12 @@ if (-not $alerts) { exit 0 }
 $idxCodes = @('sh000001', 'sz399001', 'sz399006')
 $codes = (@($alerts.tencent) + $idxCodes) -join ','
 $resp = Invoke-WebRequest -Uri "http://qt.gtimg.cn/q=$codes" -TimeoutSec 8 -UseBasicParsing
-$priceMap = @{}; $prevMap = @{}
+$priceMap = @{}; $prevMap = @{}; $highMap = @{}
 foreach ($seg in ($resp.Content -split ';')) {
     if ($seg -match 'v_(\w+)="([^"]+)"') {
         $f = $matches[2] -split '~'
         if ($f.Count -ge 5) { $priceMap[$matches[1]] = [double]$f[3]; $prevMap[$matches[1]] = [double]$f[4] }
+        if ($f.Count -ge 34) { $highMap[$matches[1]] = [double]$f[33] }   # f[33]=day high, for spike-fade take-profit
     }
 }
 # Market-crash gate: 3-index avg change <= -1.5% -> silence pullback-buy alerts (all knives in a crash).
@@ -159,20 +160,39 @@ foreach ($a in $alerts) {
                }
                else { $true }
     $wasPassed = if ($passed.ContainsKey($key)) { $passed[$key] } else { $false }
-    $hit = switch ($a.op) {
-        '>=' { $price -ge $thr }
-        '<=' { $price -le $thr }
-        '>'  { $price -gt $thr }
-        '<'  { $price -lt $thr }
-        default { $false }
+
+    if ($a.spikeFade) {
+        # Spike-fade take-profit (risk-management 5.3): intraday run-up >5% then fade >2%
+        # from the day high -> halve the position. Not a fixed price line: computed live from
+        # (dayHigh vs prevClose) and (price vs dayHigh). Added 2026-08-11 after 8/10 Taige
+        # hit +5.70% then faded -5.97% with no take-profit alert existing at all.
+        $dh = if ($highMap.ContainsKey($code)) { $highMap[$code] } else { 0 }
+        $pc = if ($prevMap.ContainsKey($code)) { $prevMap[$code] } else { 0 }
+        if ($dh -gt 0 -and $pc -gt 0) {
+            $runUp = ($dh - $pc) / $pc
+            $fade = ($dh - $price) / $dh
+            $hit = ($runUp -gt 0.05) -and ($fade -gt 0.02)
+            # re-arm when price recovers to within 1% of the day high (a fresh fade can then fire)
+            $reset = ($dh - $price) / $dh -lt 0.01
+        }
+        else { $hit = $false; $reset = $false }
     }
-    # re-arm only when price clears back out of the zone by the buffer
-    $reset = switch ($a.op) {
-        '>=' { $price -le $thr * (1 - $ReArmBuffer) }
-        '>'  { $price -le $thr * (1 - $ReArmBuffer) }
-        '<=' { $price -ge $thr * (1 + $ReArmBuffer) }
-        '<'  { $price -ge $thr * (1 + $ReArmBuffer) }
-        default { $false }
+    else {
+        $hit = switch ($a.op) {
+            '>=' { $price -ge $thr }
+            '<=' { $price -le $thr }
+            '>'  { $price -gt $thr }
+            '<'  { $price -lt $thr }
+            default { $false }
+        }
+        # re-arm only when price clears back out of the zone by the buffer
+        $reset = switch ($a.op) {
+            '>=' { $price -le $thr * (1 - $ReArmBuffer) }
+            '>'  { $price -le $thr * (1 - $ReArmBuffer) }
+            '<=' { $price -ge $thr * (1 + $ReArmBuffer) }
+            '<'  { $price -ge $thr * (1 + $ReArmBuffer) }
+            default { $false }
+        }
     }
 
     # confirm:true + in-zone -> run 3-check each cycle (skip in -Test to keep it light)
@@ -203,7 +223,16 @@ foreach ($a in $alerts) {
 
     if ($Test) {
         $arm = if ($armed[$key]) { 'armed' } else { 'fired/parked' }
-        Write-Host ("{0} {1} price={2} cond {3}{4} hit={5} -> {6}" -f $a.name, $code, $price, $a.op, $thr, $hit, $arm)
+        if ($a.spikeFade) {
+            $dh2 = if ($highMap.ContainsKey($code)) { $highMap[$code] } else { 0 }
+            $pc2 = if ($prevMap.ContainsKey($code)) { $prevMap[$code] } else { 0 }
+            $ru = if ($pc2 -gt 0) { [math]::Round((($dh2 - $pc2) / $pc2) * 100, 2) } else { 0 }
+            $fd = if ($dh2 -gt 0) { [math]::Round((($dh2 - $price) / $dh2) * 100, 2) } else { 0 }
+            Write-Host ("{0} {1} price={2} high={3} runUp={4}% fade={5}% (need >5% and >2%) hit={6} -> {7}" -f $a.name, $code, $price, $dh2, $ru, $fd, $hit, $arm)
+        }
+        else {
+            Write-Host ("{0} {1} price={2} cond {3}{4} hit={5} -> {6}" -f $a.name, $code, $price, $a.op, $thr, $hit, $arm)
+        }
     }
 }
 
