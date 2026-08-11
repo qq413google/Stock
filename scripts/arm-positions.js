@@ -80,20 +80,28 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
     }
 
     // 2. 移动止损 MA10（需拉K线；失败只跳过，硬止损已兜底）
+    //
+    // 2026-08-11 修复：原条件含 `浮盈≥5%`，加仓后加权成本抬高会把浮盈稀释掉，
+    // 导致移动止损**停止跟踪 MA10**、利润保护倒退——与 v2.9「加仓后维持原止损，
+    // 移动止损照常跟 MA10 爬」直接冲突。实例：泰格首仓49.80时浮盈13%、止损已跟到51.04；
+    // 加仓后加权成本53.25、浮盈掉到2.1%，MA10已爬到51.49却不再上移。
+    // 浮盈门槛本就是多余的第二把锁——`m10 > stopPx` 已保证**只升不降**（永不放宽），
+    // `price > m10` 保证不会布出一条立刻触发的线。两条足够安全，故去掉浮盈门槛。
     const cl = await getCloses(p.代码);
     if (cl) {
       const price = cl[cl.length - 1];
       const m10 = +ma(cl, 10).toFixed(2);
       const pl = (price - cost) / cost;
-      if (pl >= 0.05 && price > m10 && m10 > stopPx) {
+      if (price > m10 && m10 > stopPx) {
         gen.push({
           name: `${p.标的}[持仓-移动止损MA10]`, tencent: ten, op: '<=', price: m10,
           msg: `🟢移动止损:浮盈${(pl * 100).toFixed(1)}%,跌破MA10(${m10})离场保利润(趋势票让利润跑到破MA10才走)。触发=ping Claude`,
           enabled: true, posauto: true, sell: true
         });
-        log.push(`${p.标的} +移动止损MA10=${m10}(浮盈${(pl * 100).toFixed(1)}%)`);
+        log.push(`${p.标的} +移动止损MA10=${m10}(浮盈${(pl * 100).toFixed(1)}%,较原止损${stopPx}上移${(m10 - stopPx).toFixed(2)})`);
       } else {
-        log.push(`${p.标的} 未布移动止损(浮盈${(pl * 100).toFixed(1)}% / 价${price} vs MA10 ${m10})`);
+        const why = price <= m10 ? `价${price}未站上MA10 ${m10}` : `MA10 ${m10}未超过现止损${stopPx}(只升不降)`;
+        log.push(`${p.标的} 未布移动止损(${why})`);
       }
     } else {
       log.push(`${p.标的} K线拉取失败→仅布硬止损(已兜底)`);
