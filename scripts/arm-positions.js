@@ -27,13 +27,14 @@ function toTencent(secid) {
 }
 
 // 拉近30日收盘（带重试 + Connection:close，规避 undici 连接池复用坏 socket）
+// 返回 { closes, dates } —— dates 用于定位买入日，把移动止损的峰值限定在持仓期间
 async function getCloses(secid) {
-  const u = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=30`;
+  const u = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=101&fqt=1&end=20500101&lmt=60`;
   for (let i = 0; i < 5; i++) {
     try {
       const k = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0', 'Connection': 'close' } }).then(r => r.json());
-      const cl = ((k.data && k.data.klines) || []).map(L => +L.split(',')[2]);
-      if (cl.length >= 10) return cl;
+      const rows = ((k.data && k.data.klines) || []).map(L => { const p = L.split(','); return { date: p[0], c: +p[2] }; });
+      if (rows.length >= 10) return { closes: rows.map(r => r.c), dates: rows.map(r => r.date) };
     } catch (e) { /* retry */ }
     await new Promise(r => setTimeout(r, 500 * (i + 1)));
   }
@@ -104,21 +105,43 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
     // 加仓后加权成本53.25、浮盈掉到2.1%，MA10已爬到51.49却不再上移。
     // 浮盈门槛本就是多余的第二把锁——`m10 > stopPx` 已保证**只升不降**（永不放宽），
     // `price > m10` 保证不会布出一条立刻触发的线。两条足够安全，故去掉浮盈门槛。
-    const cl = await getCloses(p.代码);
-    if (cl) {
+    const kl = await getCloses(p.代码);
+    if (kl) {
+      const cl = kl.closes, dates = kl.dates;
       const price = cl[cl.length - 1];
       const m10 = +ma(cl, 10).toFixed(2);
       const pl = (price - cost) / cost;
-      if (price > m10 && m10 > stopPx) {
+
+      // 2026-08-12 修复：实盘只用了 MA10，**漏掉回测 baseline 里的另两条移动止损**，
+      // 导致实盘止损长期比回测口径宽。研究L的 baseline(总盈亏112,960/回撤22.9%)用的是：
+      //     if (浮盈>=5%) { stop = max(stop, 成本); stop = max(stop, 最高价*0.93); }
+      // 泰格实例: 成本53.25、最高57.45 → 回测口径止损 max(53.25, 53.43)=53.43，
+      // 而实盘布的 MA10=51.86，松了1.57元(3%)——等于一直在跑一个没被回测验证过的宽止损。
+      // 现补齐：只要曾达浮盈≥5%，止损同时受"保本位"和"最高价回撤7%"约束，三者取最高。
+      // ⚠️ peak 必须是**持仓期间**的最高收盘(回测里 pos.highest 从买入日开始累积)。
+      //    2026-08-12 首版误用"近40日最高"，京东方因此算出 7/2 买入前的高点9.10×0.93=8.46,
+      //    远高于现价——幸有 price>trailPx 检查挡住才没布出离谱止损。
+      const buyIdx = dates.indexOf(p.买入日);
+      const held = buyIdx >= 0 ? cl.slice(buyIdx) : cl.slice(-1);   // 找不到买入日则退化为仅当日
+      const peak = Math.max(...held);
+      const everProfit = (peak - cost) / cost >= 0.05;   // 持仓期间收盘浮盈曾达5%(与回测口径一致)
+      let trailPx = m10;
+      const parts = [`MA10=${m10}`];
+      if (everProfit) {
+        trailPx = Math.max(trailPx, cost, +(peak * 0.93).toFixed(2));
+        parts.push(`保本=${cost}`, `峰值${peak}x0.93=${(peak * 0.93).toFixed(2)}`);
+      }
+      const m10Old = m10;
+      if (price > trailPx && trailPx > stopPx) {
         gen.push({
-          name: `${p.标的}[持仓-移动止损MA10]`, tencent: ten, op: '<=', price: m10,
-          msg: `🟢移动止损:浮盈${(pl * 100).toFixed(1)}%,跌破MA10(${m10})离场保利润(趋势票让利润跑到破MA10才走)。触发=ping Claude`,
+          name: `${p.标的}[持仓-移动止损]`, tencent: ten, op: '<=', price: trailPx,
+          msg: `🟢移动止损${trailPx}(取三者最高: ${parts.join(' / ')}) - 浮盈${(pl * 100).toFixed(1)}%,跌破即离场保利润。口径与回测baseline一致(研究L)。触发=ping Claude`,
           enabled: true, posauto: true, sell: true
         });
-        log.push(`${p.标的} +移动止损MA10=${m10}(浮盈${(pl * 100).toFixed(1)}%,较原止损${stopPx}上移${(m10 - stopPx).toFixed(2)})`);
+        log.push(`${p.标的} +移动止损=${trailPx} [${parts.join(' ')}] (较原止损${stopPx}上移${(trailPx - stopPx).toFixed(2)})`);
       } else {
-        const why = price <= m10 ? `价${price}未站上MA10 ${m10}` : `MA10 ${m10}未超过现止损${stopPx}(只升不降)`;
-        log.push(`${p.标的} 未布移动止损(${why})`);
+        const why = price <= trailPx ? `价${price}未站上移动止损位${trailPx}` : `移动止损位${trailPx}未超过现止损${stopPx}(只升不降)`;
+        log.push(`${p.标的} 未布移动止损(${why}; MA10=${m10Old})`);
       }
     } else {
       log.push(`${p.标的} K线拉取失败→仅布硬止损(已兜底)`);
