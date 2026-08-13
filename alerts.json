@@ -148,6 +148,16 @@
       "spikeFade": true
     },
     {
+      "name": "泰格医药[持仓-移动止损]",
+      "tencent": "sz300347",
+      "op": "<=",
+      "price": 53.25,
+      "msg": "🟢移动止损53.25(取三者最高: MA10=52.59 / 保本=53.25 / 峰值56.86x0.93=52.88) - 浮盈6.8%,跌破即离场保利润。口径与回测baseline一致(研究L)。触发=ping Claude",
+      "enabled": true,
+      "posauto": true,
+      "sell": true
+    },
+    {
       "name": "京东方A[持仓-止损]",
       "tencent": "sz000725",
       "op": "<=",
@@ -173,11 +183,11 @@
       "tencent": "sz000725",
       "op": "<=",
       "price": 5.83,
-      "msg": "🟢移动止损5.83(取三者最高: MA10=5.83) - 浮盈0.8%,跌破即离场保利润。口径与回测baseline一致(研究L)。触发=ping Claude",
+      "msg": "🟢移动止损5.83(取三者最高: MA10=5.83) - 浮盈0.5%,跌破即离场保利润。口径与回测baseline一致(研究L)。触发=ping Claude",
       "enabled": true,
       "posauto": true,
       "sell": true
     }
   ],
-  "_posarmed": "2026-08-13 09:49 (北京)"
+  "_posarmed": "2026-08-13 13:21 (北京)"
 }

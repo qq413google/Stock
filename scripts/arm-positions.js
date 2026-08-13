@@ -54,6 +54,7 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
 
   const gen = [];
   const log = [];
+  const stopUpdates = [];   // 移动止损上移后需回写 positions.json 的记录(防K线失败时退回)
   for (const p of pos) {
     const ten = toTencent(p.代码);
     const cost = +p.成本价;
@@ -147,6 +148,7 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
           enabled: true, posauto: true, sell: true
         });
         log.push(`${p.标的} +移动止损=${trailPx} [${parts.join(' ')}] (较原止损${stopPx}上移${(trailPx - stopPx).toFixed(2)})`);
+        stopUpdates.push({ name: p.标的, stop: trailPx, basis: parts.join(' ') });
       } else {
         const why = price <= trailPx ? `价${price}未站上移动止损位${trailPx}` : `移动止损位${trailPx}未超过现止损${stopPx}(只升不降)`;
         log.push(`${p.标的} 未布移动止损(${why}; MA10=${m10Old})`);
@@ -158,6 +160,24 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
 
   obj.alerts = [...keep, ...gen];
   obj._posarmed = bj();
+
+  // 2026-08-13 修 bug：移动止损此前只写进 alerts.json，没回写 positions.json。
+  // 一旦某天 K线拉取失败(本环境常见)，重新生成时读的是 positions.json 里的旧止损，
+  // 已经爬上去的移动止损就**悄悄退回**，违反"只升不降"铁律，在趋势票上会持续漏掉已锁的利润。
+  // 实例：京东方 08-12 移动止损升到 5.83，08-13 K线失败后退回 5.76。
+  // 修法：算出更高的移动止损时同步写回 positions.json，让它成为新的持久化止损基线。
+  if (stopUpdates.length && !DRY) {
+    const posRaw = JSON.parse(fs.readFileSync(posFile, 'utf8'));
+    for (const u of stopUpdates) {
+      const t = (posRaw.持仓 || []).find(x => x.标的 === u.name);
+      if (t && (!(t.止损价 > 0) || u.stop > t.止损价)) {
+        t._止损备注 = `${(t._止损备注 || '').replace(/\s*\|\s*移动止损自动上移.*$/, '')} | 移动止损自动上移 ${t.止损价}→${u.stop} (${u.basis}, ${bj()})`.trim();
+        t.止损价 = u.stop;
+      }
+    }
+    fs.writeFileSync(posFile, JSON.stringify(posRaw, null, 2) + '\n', 'utf8');
+    console.log(`↑ 已回写 positions.json 止损价: ${stopUpdates.map(u => `${u.name}→${u.stop}`).join(', ')}`);
+  }
 
   console.log(`=== 持仓布防 ${obj._posarmed} ===`);
   console.log(`持仓 ${pos.length} 只 | 保留旧条目 ${keep.length} | 生成 posauto ${gen.length}`);
