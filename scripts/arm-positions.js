@@ -89,7 +89,7 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
       });
     }
 
-    // 4. 冲高回落止盈（risk-management 第五节3：日内涨>5%后从高点回落>2% → 减半锁利）
+    // 4. 冲高回落止盈（risk-management 第五节3 v2.11：日内涨>7%后从高点回落>2% → 减半锁利）
     //    2026-08-11 补：此前盯盘只有"止损/移动止损/加仓观察"三类，**没有任何止盈触发器**，
     //    导致 8/10 泰格日内冲 +5.70%(57.45) 后回落 -5.97%，明确满足减半锁利条件却全程无人提起
     //    （当时注意力全在"该不该加仓"上，加仓讨论挤掉了持仓例行检查）。少赚约155元事小，
@@ -101,7 +101,7 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
       const halfLots = Math.floor(p.股数 / 2 / 100) * 100;
       gen.push({
         name: `${p.标的}[持仓-冲高回落止盈]`, tencent: ten, op: 'spike', price: 0,
-        msg: `📉冲高回落止盈(日内涨>5%后从高点回落>2%,第五节3) - 减半锁利:卖${halfLots}股,留${p.股数 - halfLots}股转移动止损。触发=该减仓,ping Claude复核`,
+        msg: `📉冲高回落止盈(日内涨>7%后从高点回落>2%,第五节3 v2.11) - 减半锁利:卖${halfLots}股,留${p.股数 - halfLots}股转移动止损。触发=该减仓,ping Claude复核`,
         enabled: true, posauto: true, sell: true, spikeFade: true
       });
     }

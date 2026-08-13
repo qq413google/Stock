@@ -178,7 +178,11 @@ foreach ($a in $alerts) {
         if ($dh -gt 0 -and $pc -gt 0) {
             $runUp = ($dh - $pc) / $pc
             $fade = ($dh - $price) / $dh
-            $hit = ($runUp -gt 0.05) -and ($fade -gt 0.02)
+            # v2.11 (2026-08-13, study N): run-up threshold raised 5% -> 7%.
+            # The old 5% was never backtested and measured NEGATIVE (-6,070 over 1245 trades):
+            # halving at +5% gets shaken out by ordinary intraday swings. 7% is the tested
+            # optimum (+17,105); the 2% fade threshold stays (best within the 7% row).
+            $hit = ($runUp -gt 0.07) -and ($fade -gt 0.02)
             # re-arm when price recovers to within 1% of the day high (a fresh fade can then fire)
             $reset = ($dh - $price) / $dh -lt 0.01
         }
@@ -235,7 +239,7 @@ foreach ($a in $alerts) {
             $pc2 = if ($prevMap.ContainsKey($code)) { $prevMap[$code] } else { 0 }
             $ru = if ($pc2 -gt 0) { [math]::Round((($dh2 - $pc2) / $pc2) * 100, 2) } else { 0 }
             $fd = if ($dh2 -gt 0) { [math]::Round((($dh2 - $price) / $dh2) * 100, 2) } else { 0 }
-            Write-Host ("{0} {1} price={2} high={3} runUp={4}% fade={5}% (need >5% and >2%) hit={6} -> {7}" -f $a.name, $code, $price, $dh2, $ru, $fd, $hit, $arm)
+            Write-Host ("{0} {1} price={2} high={3} runUp={4}% fade={5}% (need >7% and >2%) hit={6} -> {7}" -f $a.name, $code, $price, $dh2, $ru, $fd, $hit, $arm)
         }
         else {
             Write-Host ("{0} {1} price={2} cond {3}{4} hit={5} -> {6}" -f $a.name, $code, $price, $a.op, $thr, $hit, $arm)
