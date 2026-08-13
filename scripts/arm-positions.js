@@ -69,13 +69,21 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
 
     // 3. 加仓观察（不依赖网络）。v2.8: 单票最多加1次——已加过(已加仓:true)就不再布，
     //    否则加仓后成本抬高、×1.05 又生成一条新线，会诱导二次加仓(违反金字塔单次原则)。
+    const addPx = +(cost * 1.05).toFixed(2);
+    // v2.10(2026-08-12): 加仓自身必须过盈亏比闸门。"成本×1.05"是机械公式,不看目标位还剩
+    // 多少空间——目标位距成本不足+11%时,加仓线会挤在目标位旁边(京东方实例:加仓线6.24 vs
+    // 目标6.30,加仓盈亏比仅0.125)。设了目标价且不达标 → 干脆不布线,免得弹了也不能用。
+    // 未设目标价的趋势票(靠移动止损让利润跑,本就不预设目标)不受影响。
+    let addRR = null;
+    if (p.目标价 > 0 && addPx > stopPx) addRR = (p.目标价 - addPx) / (addPx - stopPx);
     if (p.已加仓 === true) {
       log.push(`${p.标的} 已加仓过(v2.8单票限1次)→不布加仓观察`);
+    } else if (addRR !== null && addRR < 2) {
+      log.push(`${p.标的} 加仓盈亏比${addRR.toFixed(2)}<2(加仓价${addPx}/目标${p.目标价}/止损${stopPx})→v2.10不布加仓观察`);
     } else {
-      const addPx = +(cost * 1.05).toFixed(2);
       gen.push({
         name: `${p.标的}[持仓-加仓观察]`, tencent: ten, op: '>', price: addPx,
-        msg: `📈浮盈≥5%(成本×1.05=${addPx})加仓观察 - 仅趋势完好+站稳MA10金字塔加(减量),严禁向下摊薄。触发=价到,ping Claude过闸门`,
+        msg: `📈浮盈≥5%(成本×1.05=${addPx})加仓观察${addRR !== null ? `,加仓盈亏比${addRR.toFixed(1)}` : ''} - 仅趋势完好+站稳MA10+回踩形态优先(v2.9b)金字塔加(减量),严禁向下摊薄。触发=价到,ping Claude过闸门`,
         enabled: true, posauto: true
       });
     }
