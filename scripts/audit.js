@@ -110,6 +110,68 @@ const UNVERIFIED = [
 ];
 UNVERIFIED.forEach(([r, why]) => console.log(`  ⚪ ${r} —— ${why}`));
 
+// ---------- 6. 文档一致性 ----------
+// 2026-08-14 加：全文档审查一次扫出18处过时/矛盾（"移动止损跟MA10"在3文件5处残留、
+// 用户画像写着空仓、版本历史缺v2.11~v2.14）。根因是结构性的——改规则时只改"生效的那一处"，
+// 漏掉散落各处的摘要/速查表/示例。机械可查的部分不该靠人记得全库搜一遍。
+console.log('\n【6】文档一致性 (已废止概念是否还在当前表述里)');
+const DOCS = ['AGENTS.md', 'SKILL.md', '策略共识与验证计划.md', 'references/risk-management.md'];
+// okIfNear: 同一行里出现这些词说明已正确标注为废止/历史，不算问题
+const DEPRECATED = [
+  { name: '盈亏比≥2 门槛 (v2.13废止)', re: /盈亏比\s*[≥>]=?\s*2(?!\d)/, ok: /废止|证伪|降级|v2\.13|作废|不再|原文/ },
+  { name: '移动止损含MA10 (v2.12剔除)', re: /移动止损.{0,6}MA10|MA10.{0,4}移动止损/, ok: /剔除|不含|严禁|已从|证伪|v2\.12|无MA10|推翻|作废/ },
+  { name: '冲高回落5%阈值 (v2.11改7%)', re: /日内涨\s*[>＞]\s*5%|涨\s*[>＞]\s*5%\s*后从高点/, ok: /v2\.11|原5%|改为|证伪|7%/ },
+  { name: '当日涨>5%禁买 (v2.14改3%)', re: /当日\*{0,2}涨幅?\s*[>＞]\s*5%/, ok: /v2\.14|原5%|原为|加仓|豁免|历史|改为/ },
+];
+const HIST = /^\s*[-*]\s*\**v\d|^\s*[-*]\s*\**20\d\d-\d\d-\d\d/;   // 版本历史条目：保持原貌，不算问题
+let docIssues = 0;
+for (const d of DOCS) {
+  let txt;
+  try { txt = fs.readFileSync(path.join(root, d), 'utf8'); } catch { continue; }
+  const inHistFrom = txt.indexOf('## 版本历史');
+  const lines = txt.split('\n');
+  // 用累计偏移定位版本历史起点，避免每行重算(原实现每行都 slice+join，O(n^2))
+  let off = 0;
+  lines.forEach((line, i) => {
+    const myOff = off; off += line.length + 1;
+    if (inHistFrom >= 0 && myOff > inHistFrom) return;   // 版本历史整节跳过
+    if (HIST.test(line)) return;
+    // 2026-08-14 修：首版只看单行，把"说明写在下一行"的正确标注误报为问题
+    // (risk-mgmt:184「加仓盈亏比≥2」的"降级为参考"写在185行)。改为看 ±1 行的上下文窗口。
+    const ctx = [lines[i - 1] || '', line, lines[i + 1] || ''].join(' ');
+    for (const dp of DEPRECATED) {
+      if (dp.re.test(line) && !dp.ok.test(ctx)) {
+        issues.push(`${d}:${i + 1} 仍在用已废止概念「${dp.name}」且未标注`);
+        console.log(`  🔴 ${d}:${i + 1} ${dp.name}`);
+        docIssues++;
+      }
+    }
+  });
+}
+// 版本号一致性：规则文件最新版 vs 各处速查表引用
+const rm = fs.readFileSync(path.join(root, 'references', 'risk-management.md'), 'utf8');
+const latest = (rm.match(/^- \*\*v(\d+\.\d+\w*)/m) || [])[1];
+if (latest) {
+  const ag = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
+  const cited = [...ag.matchAll(/速查 · v([\d.]+)|唯一规则源，当前 v([\d.]+)/g)].map(m => m[1] || m[2]);
+  const bad = cited.filter(v => v !== latest.replace(/[a-z]$/, ''));
+  if (bad.length) { issues.push(`AGENTS 速查表版本号 ${bad.join('/')} 落后于规则文件最新 v${latest}`); console.log(`  🔴 版本号落后: AGENTS引用v${bad.join('/')} vs 规则最新v${latest}`); docIssues++; }
+  else console.log(`  ✅ 版本号一致 (规则最新 v${latest})`);
+}
+// 自选池只数：watchlist.json 实际 vs 文档描述
+const wlN = JSON.parse(fs.readFileSync(path.join(root, 'watchlist.json'), 'utf8')).stocks.length;
+const agTxt = fs.readFileSync(path.join(root, 'AGENTS.md'), 'utf8');
+const claimed = [...agTxt.matchAll(/自选股池[^\n]{0,6}[（(](\d+)\s*只/g)].map(m => +m[1]);
+const wrong = claimed.filter(c => c !== wlN);
+if (wrong.length) { issues.push(`AGENTS 写自选池 ${wrong.join('/')} 只，实际 ${wlN} 只`); console.log(`  🔴 自选池只数: 文档${wrong.join('/')} vs 实际${wlN}`); docIssues++; }
+else console.log(`  ✅ 自选池只数一致 (${wlN}只)`);
+// 账户状态是否被写死进文档（静态快照必然过时）
+if (/当前状态[：:]\s*(空仓|持仓)/.test(agTxt) && !/不写死|现读/.test(agTxt.match(/当前状态[：:][^\n]*/)[0])) {
+  issues.push('AGENTS 用户画像写死了账户状态 —— 静态快照必然过时，应改为"现读 positions.json"');
+  console.log('  🔴 用户画像写死账户状态'); docIssues++;
+}
+if (!docIssues) console.log('  ✅ 未发现已废止概念的残留');
+
 // ---------- 汇总 ----------
 console.log('\n' + '='.repeat(50));
 if (issues.length) {
