@@ -115,7 +115,8 @@ UNVERIFIED.forEach(([r, why]) => console.log(`  ⚪ ${r} —— ${why}`));
 // 用户画像写着空仓、版本历史缺v2.11~v2.14）。根因是结构性的——改规则时只改"生效的那一处"，
 // 漏掉散落各处的摘要/速查表/示例。机械可查的部分不该靠人记得全库搜一遍。
 console.log('\n【6】文档一致性 (已废止概念是否还在当前表述里)');
-const DOCS = ['AGENTS.md', 'SKILL.md', '策略共识与验证计划.md', 'references/risk-management.md'];
+const DOCS = ['AGENTS.md', 'SKILL.md', '策略共识与验证计划.md', 'references/risk-management.md',
+  'SETUP.md', 'TODO.md', 'references/technical-analysis.md', 'references/eastmoney-api.md'];  // 2026-08-14 扩至8份(原只查4份,漏掉SETUP/TODO等)
 // okIfNear: 同一行里出现这些词说明已正确标注为废止/历史，不算问题
 const DEPRECATED = [
   { name: '盈亏比≥2 门槛 (v2.13废止)', re: /盈亏比\s*[≥>]=?\s*2(?!\d)/, ok: /废止|证伪|降级|v2\.13|作废|不再|原文/ },
