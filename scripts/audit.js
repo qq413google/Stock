@@ -118,12 +118,41 @@ console.log('\n【6】文档一致性 (已废止概念是否还在当前表述�
 const DOCS = ['AGENTS.md', 'SKILL.md', '策略共识与验证计划.md', 'references/risk-management.md',
   'SETUP.md', 'TODO.md', 'references/technical-analysis.md', 'references/eastmoney-api.md'];  // 2026-08-14 扩至8份(原只查4份,漏掉SETUP/TODO等)
 // okIfNear: 同一行里出现这些词说明已正确标注为废止/历史，不算问题
+// 2026-08-14 二次修：首版的 ok 判定有两个漏洞，实测漏掉了 risk-mgmt 两处真问题——
+//   ① ok 只要**整行任意位置**出现否定词就豁免：第216行"移动止损照常跟MA10爬"被同行
+//      "保本位止损...证伪"里的"证伪"豁免了（那是在说另一件事）。
+//   ② re 的距离限制太短：`.{0,6}` 匹配不了"移动止损继续按第五节跟 MA10"（中间隔9字）。
+// 改法：距离放宽到 20；否定词必须**贴着关键词本身**（anchor 前后 near 字符内），而不是整行。
 const DEPRECATED = [
-  { name: '盈亏比≥2 门槛 (v2.13废止)', re: /盈亏比\s*[≥>]=?\s*2(?!\d)/, ok: /废止|证伪|降级|v2\.13|作废|不再|原文/ },
-  { name: '移动止损含MA10 (v2.12剔除)', re: /移动止损.{0,6}MA10|MA10.{0,4}移动止损/, ok: /剔除|不含|严禁|已从|证伪|v2\.12|无MA10|推翻|作废/ },
-  { name: '冲高回落5%阈值 (v2.11改7%)', re: /日内涨\s*[>＞]\s*5%|涨\s*[>＞]\s*5%\s*后从高点/, ok: /v2\.11|原5%|改为|证伪|7%/ },
-  { name: '当日涨>5%禁买 (v2.14改3%)', re: /当日\*{0,2}涨幅?\s*[>＞]\s*5%/, ok: /v2\.14|原5%|原为|加仓|豁免|历史|改为/ },
+  // 2026-08-14 四次调：near 放宽到50后又漏了漏网案例1——50字符窗口把同行"研究K证伪"
+  // (说的是保本位被证伪)纳了进来。距离判据有固有权衡：小则误报、大则漏报。
+  // 改用**紧邻**：否定词必须直接搭在关键词上(±20字)，"MA10已被v2.12推翻"这类算，
+  // 而"…证伪）。改为：…跟 MA10 爬"里 MA10 前20字无否定词，仍会报出来。
+  // 盈亏比的标注常写在下一句(如"该条降级为参考")，故给它更宽的 55。
+  { name: '盈亏比≥2 门槛 (v2.13废止)', re: /盈亏比\s*[≥>]=?\s*2(?!\d)/,
+    anchor: /盈亏比\s*[≥>]=?\s*2(?!\d)/g, near: 55, no: /废止|证伪|降级|v2\.13|作废|不再|原文|保留供参考/ },
+  { name: '移动止损含MA10 (v2.12剔除)', re: /移动止损.{0,20}MA10|MA10.{0,20}移动止损/,
+    anchor: /MA10/g, near: 20, no: /剔除|不含|严禁|不得|已从|无MA10|推翻|作废|已废|v2\.12/ },
+  { name: '冲高回落5%阈值 (v2.11改7%)', re: /日内涨\s*[>＞]\s*5%|涨\s*[>＞]\s*5%\s*后从高点/,
+    anchor: /涨\s*[>＞]\s*5%/g, near: 30, no: /v2\.11|原5%|改为|证伪|7%/ },
+  { name: '当日涨>5%禁买 (v2.14改3%)', re: /当日\*{0,2}涨幅?\s*[>＞]\s*5%/,
+    anchor: /涨幅?\s*[>＞]\s*5%/g, near: 30, no: /v2\.14|原5%|原为|加仓|豁免|历史|改为/ },
 ];
+// 关键词附近是否有否定/标注 —— 只看 anchor 前后 near 个字符，避免整行任意位置的无关否定词造成豁免。
+// 2026-08-14 三次调：首版用 allAnnotated(每个anchor都须标注)，实测对三处**正确标注**的行误报——
+//   AGENTS表格行「浮亏时也用MA10收紧 | v2.12 剔除MA10」两个MA10只有后一个带标注，
+//   但整行语境明显是在讲"已修复的历史bug"。改为 anyAnnotated：**只要有一处正确标注就放过**。
+//   这不会放走真问题——真正的漏网行(如原216行"移动止损照常跟MA10爬")附近一个否定词都没有。
+function annotatedNear(text, dp) {
+  const re = new RegExp(dp.anchor.source, 'g');
+  let m, found = false;
+  while ((m = re.exec(text)) !== null) {
+    found = true;
+    const seg = text.slice(Math.max(0, m.index - dp.near), m.index + m[0].length + dp.near);
+    if (dp.no.test(seg)) return true;    // 任一处带正确标注 → 整段视为已交代
+  }
+  return !found;
+}
 const HIST = /^\s*[-*]\s*\**v\d|^\s*[-*]\s*\**20\d\d-\d\d-\d\d/;   // 版本历史条目：保持原貌，不算问题
 let docIssues = 0;
 for (const d of DOCS) {
@@ -141,7 +170,7 @@ for (const d of DOCS) {
     // (risk-mgmt:184「加仓盈亏比≥2」的"降级为参考"写在185行)。改为看 ±1 行的上下文窗口。
     const ctx = [lines[i - 1] || '', line, lines[i + 1] || ''].join(' ');
     for (const dp of DEPRECATED) {
-      if (dp.re.test(line) && !dp.ok.test(ctx)) {
+      if (dp.re.test(line) && !annotatedNear(ctx, dp)) {
         issues.push(`${d}:${i + 1} 仍在用已废止概念「${dp.name}」且未标注`);
         console.log(`  🔴 ${d}:${i + 1} ${dp.name}`);
         docIssues++;
