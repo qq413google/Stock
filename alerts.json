@@ -1,12 +1,12 @@
 {
   "_comment": "自动布防生成(scripts/arm-alerts.js)。每日开盘前重跑刷新。标 manual:true 的条目会被保留。触发=价位到了,买不买仍须过 v2.0 全闸门。",
-  "_generated": "2026-08-13 13:32 (北京)",
+  "_generated": "2026-08-14 09:31 (北京)",
   "alerts": [
     {
       "name": "沪电股份",
       "tencent": "sz002463",
       "op": "<=",
-      "price": 125.21,
+      "price": 122.82,
       "msg": "回踩买区(MA5 150.5~152) - 6/30机构+16.62亿回补/多头+MACD金叉;缩量止跌+主力续流入=突破回踩买,止损MA10(147),盈亏比~2.7",
       "enabled": false,
       "manual": true,
@@ -18,7 +18,7 @@
       "name": "恒瑞医药",
       "tencent": "sh600276",
       "op": "<=",
-      "price": 54.44,
+      "price": 54.27,
       "msg": "回踩MA10(54.53)缩量企稳 - 7/10测箱体上沿(57.77)未破,非追高;等回踩确认,止损前低支撑下方",
       "enabled": true,
       "manual": true,
@@ -29,7 +29,7 @@
       "name": "药明康德",
       "tencent": "sh603259",
       "op": "<=",
-      "price": 150.25,
+      "price": 153.31,
       "msg": "回踩MA10(122.38)缩量企稳 - 7/10已反弹3日(115→125+),不追高;等回踩不破再进,资金面7/9前方向反复需再确认",
       "enabled": true,
       "manual": true,
@@ -37,11 +37,21 @@
       "track": "MA10"
     },
     {
+      "name": "通富微电",
+      "tencent": "sz002156",
+      "op": ">",
+      "price": 63.89,
+      "msg": "站回MA20(63.89) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "enabled": true,
+      "confirm": true,
+      "rebound": true
+    },
+    {
       "name": "立讯精密",
       "tencent": "sz002475",
       "op": ">",
-      "price": 58.05,
-      "msg": "站回MA20(58.05) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 57.92,
+      "msg": "站回MA20(57.92) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -50,68 +60,42 @@
       "name": "德赛西威",
       "tencent": "sz002920",
       "op": ">",
-      "price": 93.79,
-      "msg": "反弹收复MA10(93.79) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 94.07,
+      "msg": "反弹收复MA10(94.07) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
-    },
-    {
-      "name": "康龙化成",
-      "tencent": "sz300759",
-      "op": ">",
-      "price": 43.09,
-      "msg": "反弹收复MA10(43.09) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
-      "enabled": true
-    },
-    {
-      "name": "工商银行",
-      "tencent": "sh601398",
-      "op": ">",
-      "price": 7.71,
-      "msg": "站回MA20(7.71) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
-    },
-    {
-      "name": "比亚迪",
-      "tencent": "sz002594",
-      "op": ">",
-      "price": 92.23,
-      "msg": "站回MA20(92.23) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
     },
     {
       "name": "中国稀土",
       "tencent": "sz000831",
       "op": ">",
-      "price": 53.37,
-      "msg": "反弹收复MA10(53.37) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 54.22,
+      "msg": "反弹收复MA10(54.22) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     },
     {
       "name": "四川黄金",
       "tencent": "sz001337",
       "op": ">",
-      "price": 44.75,
-      "msg": "反弹收复MA10(44.75) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 41.36,
+      "msg": "反弹收复MA20(41.36) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     },
     {
       "name": "巨人网络",
       "tencent": "sz002558",
       "op": ">",
-      "price": 28.17,
-      "msg": "反弹收复MA20(28.17) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
-      "enabled": true
+      "price": 28.11,
+      "msg": "站回MA20(28.11) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "enabled": true,
+      "confirm": true,
+      "rebound": true
     },
     {
       "name": "中信证券",
       "tencent": "sh600030",
       "op": ">",
-      "price": 28.12,
-      "msg": "站回MA20(28.12) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 28.13,
+      "msg": "站回MA20(28.13) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -125,28 +109,7 @@
       "enabled": true,
       "posauto": true,
       "sell": true
-    },
-    {
-      "name": "京东方A[持仓-止损]",
-      "tencent": "sz000725",
-      "op": "<=",
-      "price": 5.83,
-      "msg": "🔴止损线到 - 成本5.94/止损5.83。放量破位或10点后仍在下方即按纪律清,不留隔夜(灾难线-8%=5.46)。触发=该卖,ping Claude复核",
-      "enabled": true,
-      "posauto": true,
-      "sell": true
-    },
-    {
-      "name": "京东方A[持仓-冲高回落止盈]",
-      "tencent": "sz000725",
-      "op": "spike",
-      "price": 0,
-      "msg": "📉冲高回落止盈(日内涨>5%后从高点回落>2%,第五节3) - 减半锁利:卖400股,留500股转移动止损。触发=该减仓,ping Claude复核",
-      "enabled": true,
-      "posauto": true,
-      "sell": true,
-      "spikeFade": true
     }
   ],
-  "_posarmed": "2026-08-13 13:37 (北京)"
+  "_posarmed": "2026-08-14 10:13 (北京)"
 }

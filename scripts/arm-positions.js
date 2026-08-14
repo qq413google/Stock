@@ -134,17 +134,34 @@ function bj() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slic
       const held = buyIdx >= 0 ? cl.slice(buyIdx) : cl.slice(-1);   // 找不到买入日则退化为仅当日
       const peak = Math.max(...held);
       const everProfit = (peak - cost) / cost >= 0.05;   // 持仓期间收盘浮盈曾达5%(与回测口径一致)
-      let trailPx = m10;
-      const parts = [`MA10=${m10}`];
+
+      // 🔴 2026-08-14 重大修复(研究P)：**移动止损里彻底去掉 MA10**。
+      // 京东方 08-14 仅亏1.68%即被扫出(实际止损5.85 vs 计划5.76，当日最低5.83从未跌破5.76)，
+      // 用户追问"才亏1个多点合理吗"引出本次回测。结果(31只/1200日/1248笔)：
+      //     A 无MA10(回测baseline)      总+157,339  回撤23.4%  平均持有8.7天  ← 唯一正确
+      //     B baseline+MA10(有盈利门槛) 总 +27,188  回撤40.0%  (-130,152)
+      //     C 无条件MA10(修复前的实盘)  总 -59,328  回撤115.2% (-216,667) ← 会打爆账户
+      //     D 只用MA10(规则第五节1字面) 总 +33,561  回撤49.3%  (-123,779)
+      // 机制：MA10太贴近价格，把平均持有期从8.7天压到3.3天、交易数1248→1689，
+      //       胜率反而从21%升到25%但每笔期望从+126元变成-35元——
+      //       典型的"提高胜率毁掉盈亏比"(策略共识第一条警告的陷阱)。
+      // 切片验证：在"从未浮盈≥5%"的交易上(京东方属此类)，B/D与A完全无差异(有门槛就不生效)，
+      //       只有C造成-134,143损失 —— 精确指向京东方那笔的成因。
+      // ⚠️ 连带：规则第五节1"跌破MA10/前低才走"的**字面表述已被证伪**(方案D也差12.4万)，
+      //     该条已同步改为"跌破保本位/峰值回撤7%才走"。
+      const parts = [];
+      let trailPx = 0;
       if (everProfit) {
-        trailPx = Math.max(trailPx, cost, +(peak * 0.93).toFixed(2));
+        trailPx = Math.max(cost, +(peak * 0.93).toFixed(2));
         parts.push(`保本=${cost}`, `峰值${peak}x0.93=${(peak * 0.93).toFixed(2)}`);
+      } else {
+        log.push(`${p.标的} 未布移动止损(持仓期间峰值浮盈${(((peak - cost) / cost) * 100).toFixed(1)}%未达5%,按回测口径维持原止损${stopPx})`);
       }
       const m10Old = m10;
-      if (price > trailPx && trailPx > stopPx) {
+      if (everProfit && price > trailPx && trailPx > stopPx) {
         gen.push({
           name: `${p.标的}[持仓-移动止损]`, tencent: ten, op: '<=', price: trailPx,
-          msg: `🟢移动止损${trailPx}(取三者最高: ${parts.join(' / ')}) - 浮盈${(pl * 100).toFixed(1)}%,跌破即离场保利润。口径与回测baseline一致(研究L)。触发=ping Claude`,
+          msg: `🟢移动止损${trailPx}(取两者最高: ${parts.join(' / ')}；MA10已按研究P剔除) - 浮盈${(pl * 100).toFixed(1)}%,跌破即离场保利润。口径与回测baseline一致。触发=ping Claude`,
           enabled: true, posauto: true, sell: true
         });
         log.push(`${p.标的} +移动止损=${trailPx} [${parts.join(' ')}] (较原止损${stopPx}上移${(trailPx - stopPx).toFixed(2)})`);
