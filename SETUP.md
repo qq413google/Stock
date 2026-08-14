@@ -155,6 +155,8 @@ Enable-ScheduledTask  -TaskName "StockAlerts"
 # 2) 重新布防 + 校验
 node scripts/arm-positions.js
 node scripts/positions.js
+# 3) 必做：事后自查(止损一致性/参数漂移/账目自洽/文档一致性)
+node scripts/audit.js
 ```
 
 ---
@@ -164,10 +166,12 @@ node scripts/positions.js
 | 机制 | 说明 |
 |---|---|
 | **边沿触发** | 穿越触发线才弹，贴着线不会每分钟刷屏；价格反向脱离 0.5%（`$ReArmBuffer`）后重新武装 |
-| **状态文件** | `tasks/alerts-state.json` 记录每条线的 armed/passed，**按"代码\|触发器名"分键**（同一只票的止损和加仓互不干扰）；跨日自动清空 |
+| **状态文件** | `tasks/alerts-state.json` 记录每条线的 armed/passed，**按"代码\|触发器名\|阈值"三段分键**（2026-08-14起）：同一只票的止损/加仓互不干扰，且**触发线一变就自动重新评估 armed**——此前只按前两段分键，13:30 重布防改了触发线后仍沿用旧 armed，导致德赛西威误报"反弹收复"；跨日自动清空 |
 | **每日重布防** | 首次跑到 ≥09:30 和 ≥13:30 时，各自动跑一次 `arm-alerts.js` + `arm-positions.js` |
 | **崩盘门** | 三大指数均值 ≤ -1.5% 时静音**买入类**提醒（暴跌日全是飞刀）；**`sell:true` 的止损/止盈照弹** |
 | **开盘噪声窗** | 09:30–10:00 的弹窗自动加 `LOOK ONLY` 横幅（开盘插针不算数，见风控 v2.6） |
+| **reclaim guard** | `op:>` 的"反弹收复"类触发器要求**昨收≤线 或 当日最低≤线**才算数——防止"从上方跌来还没破线"被误判成"从下方收复"（2026-08-14 德赛西威实例）|
+| **冲高回落止盈** | `spikeFade:true`，盘中实时算 `日内涨幅>7%`(v2.11) 且 `从高点回落>2%`；仅≥200股持仓才布 |
 | **分级音效** | 卖出类=系统警报+1175Hz 三连×2；买入类=柔和双音。声音在阻塞式弹窗**之前**播放 |
 | **零 token** | 整条链路只有 PowerShell + Node，不调用任何 AI；AI 只在你拿弹窗去问时才介入 |
 
@@ -210,7 +214,7 @@ node scripts/positions.js
 ├── references/
 │   └── risk-management.md ← ⭐ 唯一规则源（其它地方的规则摘要都可能滞后）
 ├── 策略共识与验证计划.md    ← 核心认知 + 已证伪的信号清单（别重复踩坑）
-├── scripts/               ← 数据脚本（无依赖，直接 node 跑）
+├── scripts/               ← 数据脚本（无依赖，直接 node 跑）；**audit.js = 操作后自查，必跑**
 ├── tasks/                 ← 盯盘：check-alerts.ps1 / run-hidden.vbs / alerts.log
 ├── backtest/              ← 回测引擎与各项研究（改规则前先看这里有没有测过）
 └── *.json                 ← watchlist/positions/trades/events(手改) + alerts(自动生成)
