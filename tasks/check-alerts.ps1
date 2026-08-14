@@ -132,12 +132,13 @@ if (-not $alerts) { exit 0 }
 $idxCodes = @('sh000001', 'sz399001', 'sz399006')
 $codes = (@($alerts.tencent) + $idxCodes) -join ','
 $resp = Invoke-WebRequest -Uri "http://qt.gtimg.cn/q=$codes" -TimeoutSec 8 -UseBasicParsing
-$priceMap = @{}; $prevMap = @{}; $highMap = @{}
+$priceMap = @{}; $prevMap = @{}; $highMap = @{}; $lowMap = @{}
 foreach ($seg in ($resp.Content -split ';')) {
     if ($seg -match 'v_(\w+)="([^"]+)"') {
         $f = $matches[2] -split '~'
         if ($f.Count -ge 5) { $priceMap[$matches[1]] = [double]$f[3]; $prevMap[$matches[1]] = [double]$f[4] }
         if ($f.Count -ge 34) { $highMap[$matches[1]] = [double]$f[33] }   # f[33]=day high, for spike-fade take-profit
+        if ($f.Count -ge 35) { $lowMap[$matches[1]] = [double]$f[34] }    # f[34]=day low, for reclaim guard (2026-08-14)
     }
 }
 # Market-crash gate: 3-index avg change <= -1.5% -> silence pullback-buy alerts (all knives in a crash).
@@ -157,6 +158,14 @@ foreach ($a in $alerts) {
     # code; a shared flag let one alert's re-arm branch re-arm ANOTHER alert every cycle
     # (add-watch popped every minute), and one alert's fire could silence a sibling stop alert.
     $key = "$code|$($a.name)"
+    # 2026-08-14 fix: the armed flag was keyed only by alert name, so when the 13:30 re-arm
+    # CHANGED an alert's threshold, the stale armed value (computed against the OLD threshold)
+    # was reused -> false alerts. Real case: 德赛西威 09:31 line = MA10 ~96.x (armed TRUE since
+    # prevClose 96.05 <= 96.x); at 13:30 price had crashed so the line switched to MA20 89.32;
+    # armed stayed TRUE and price 91.2 > 89.32 fired a "reclaimed MA20" alert for a stock that
+    # never went below 89.32 all day (day low 90.50) -- it was falling, not reclaiming.
+    # Fix: fold the threshold into the state key, so any threshold change re-seeds armed cleanly.
+    $key = "$key|$thr"
     $isArmed = if ($armed.ContainsKey($key)) { $armed[$key] }
                elseif ($a.op -eq '>') {
                    # Seed "armed" from prevClose, not the current instant price (2026-07-22 lesson:
@@ -166,6 +175,20 @@ foreach ($a in $alerts) {
                    if ($prevMap.ContainsKey($code)) { $prevMap[$code] -le $thr } else { $price -le $thr }
                }
                else { $true }
+    # 2026-08-14: "reclaim" semantics guard for op '>' alerts.
+    # An op '>' alert means "price came UP from below and reclaimed this level". Checking only
+    # `price > thr` cannot tell that apart from "price is falling from above and hasn't broken
+    # the level yet" -- the same space-vs-spacetime confusion that hit confirm.js (v2.9) and the
+    # trailing stop (v2.12), now in the trigger layer. Require proof the price was actually below
+    # the level: either yesterday closed below it, or today's low dipped below it.
+    # 德赛西威 2026-08-14: prevClose 96.05 / day low 90.50, both above the 89.32 line -> not a
+    # reclaim, suppressed. 巨人网络 same day: day low 27.32 < 28.12 line -> genuine reclaim, kept.
+    if ($a.op -eq '>' -and $isArmed) {
+        $cameFromBelow = $false
+        if ($prevMap.ContainsKey($code) -and $prevMap[$code] -le $thr) { $cameFromBelow = $true }
+        if ($lowMap.ContainsKey($code) -and $lowMap[$code] -le $thr) { $cameFromBelow = $true }
+        if (-not $cameFromBelow) { $isArmed = $false }
+    }
     $wasPassed = if ($passed.ContainsKey($key)) { $passed[$key] } else { $false }
 
     if ($a.spikeFade) {
