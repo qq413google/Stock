@@ -110,6 +110,26 @@ const UNVERIFIED = [
 ];
 UNVERIFIED.forEach(([r, why]) => console.log(`  ⚪ ${r} —— ${why}`));
 
+// ---------- 5b. 部分平仓是否漏记 trades.json ----------
+// 2026-08-18 加：泰格 8/13 减半锁利 +267 只写进 positions.json 的 _减仓记录、未立条进 trades.json，
+// stats.js 因此漏统计——泰格整笔实为 +231，统计却只看到第二段的 -36（累计盈亏差了 267 元）。
+// **减半锁的通常是盈利单**，只记后半段 = 把赢的丢掉、把亏的留下，
+// 会让「攒30笔验证期望值」这个核心目标的样本系统性偏负。
+console.log('\n【5b】部分平仓记账完整性');
+{
+  const trades = rd('trades.json');
+  const partials = trades.filter(t => t.部分平仓);
+  let bad = 0;
+  for (const h of holdings) {
+    if (!h._减仓记录) continue;
+    const d = (String(h._减仓记录).match(/(20\d\d-\d\d-\d\d)/) || [])[1];
+    const logged = trades.some(t => t.标的 === h.标的 && t.卖出日 === d);
+    console.log(`  ${logged ? '✅' : '🔴'} ${h.标的} 减仓记录(${d || '日期未识别'}) ${logged ? '已立条' : '**未立条进 trades.json**'}`);
+    if (!logged) { bad++; issues.push(`${h.标的} 的部分平仓(${d}) 只写在 positions 备注里，未记入 trades.json —— stats 会漏统计`); }
+  }
+  if (!bad) console.log(`  ✅ 无漏记 | trades 中已标注的部分平仓共 ${partials.length} 笔`);
+}
+
 // ---------- 6. 文档一致性 ----------
 // 2026-08-14 加：全文档审查一次扫出18处过时/矛盾（"移动止损跟MA10"在3文件5处残留、
 // 用户画像写着空仓、版本历史缺v2.11~v2.14）。根因是结构性的——改规则时只改"生效的那一处"，
