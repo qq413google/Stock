@@ -106,6 +106,37 @@ const ma = (kl, i, n) => kl.slice(i - n + 1, i + 1).reduce((a, b) => a + b.c, 0)
       continue;
     }
     if (!(c > m60)) { skipped.push(`${s.name}(破MA60/弱势,已站MA20)`); continue; }
+
+    // ---- 突破买候选（v2.16，2026-08-20 研究U 启用；此前三类买点只监控两类）----
+    // 规则第二节写了三类合法买点，但本脚本长期只布防「回踩收复」与「超跌反包」，
+    // **「突破买」从未有过任何触发器** —— 实盘8笔里该类0笔，不是它不好，是系统从没提醒过。
+    // 策略共识「二·补3」(2026-07-09 中兴那次)已写过同一元教训"工具覆盖<策略定义会系统性漏掉
+    // 整类机会"，当时补了反包，突破拖了一个半月才补上。
+    // 研究U(36只/1200日)：突破买单跑 663笔 每笔137元 pf1.41 回撤16.2%，**单笔质量优于回踩
+    // 支撑(95元/1.27/19.4%)**；三类全开 vs 现状两类 = +30,811元、回撤仅+0.1点；
+    // 且它是**绞肉市最抗跌的一类**(前半段 -42元/笔 vs 回踩 -141)。
+    // 3%禁买线对它几乎无影响(只砍4%机会)——因为买点在"突破后回踩MA20附近"，那时涨幅已回落。
+    //
+    // 口径逐字复用 backtest/studies.js buyPoints() 的"突破回踩"分支：
+    //   近5日内出现过「收盘 ≥ 前20日最高」 且 现价 ≤ MA20×1.03 且 现价 > MA20
+    // 布防价取 MA20（回踩确认位），触发后仍须过完整闸门。
+    {
+      let newHigh = false;
+      for (let k = Math.max(0, i - 5); k <= i; k++) {
+        const w = Math.max(...kl.slice(Math.max(0, k - 20), k + 1).map(x => x.c));
+        if (kl[k].c >= w) { newHigh = true; break; }
+      }
+      // 仅当"已突破过、但尚未回踩到MA20附近"时才值得布防；已在MA20附近的走下面回踩分支即可
+      if (newHigh && c > m20 * 1.03 && m20 <= PRICE_CAP && m20 <= prevC * 1.03) {
+        auto.push({
+          name: s.name, tencent: s.tencent, op: '<=', price: +(m20 * 1.03).toFixed(2),
+          msg: `回踩至MA20上沿(${(m20 * 1.03).toFixed(2)}) 突破买候选(v2.16研究U):近5日创20日新高后回踩,缩量不破MA20(${m20.toFixed(2)})+主力净流入再确认。⚠️破MA20则形态失效`,
+          enabled: true, confirm: true, breakout: true
+        });
+        // 不 continue —— 突破候选与下面的回踩支撑线不冲突，可并存
+      }
+    }
+
     const support = c > m10 ? m10 : m20;
     const supName = c > m10 ? 'MA10' : 'MA20';
     if (support > PRICE_CAP) { skipped.push(`${s.name}(支撑${support.toFixed(0)}>180超价)`); continue; }
