@@ -95,7 +95,7 @@ if (-not $Test) {
 
 # Load state (armed + passed maps). Only honored when the stored date == today.
 $today = (Get-Date -Format 'yyyy-MM-dd')
-$armed = @{}; $passed = @{}; $stateDate = ''; $armMark = ''; $crashMode = $false
+$armed = @{}; $passed = @{}; $stateDate = ''; $armMark = ''; $crashMode = $false; $snapMark = ''
 if (Test-Path $stateFile) {
     try {
         $st = Get-Content -LiteralPath $stateFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -105,6 +105,7 @@ if (Test-Path $stateFile) {
             if ($st.armed) { foreach ($p in $st.armed.PSObject.Properties) { $armed[$p.Name] = [bool]$p.Value } }
             if ($st.passed) { foreach ($p in $st.passed.PSObject.Properties) { $passed[$p.Name] = [bool]$p.Value } }
             $armMark = [string]$st.arm
+            if ($null -ne $st.snap) { $snapMark = [string]$st.snap }
         }
     } catch {}
 }
@@ -121,6 +122,25 @@ if (-not $Test) {
         $posJs = Join-Path $root 'scripts\arm-positions.js'
         if (Test-Path $posJs) { try { & node $posJs | Out-Null } catch {} }
         $armMark = $curWin
+    }
+}
+
+# ---- Intraday flow snapshots at 4 fixed times (2026-08-20) ----------------------------
+# Why: cache/intraday was only written when confirm.js ran, i.e. ONLY on alert triggers.
+# That is event-driven sampling: 11 trading days produced just 31 stock-days, 12 of them
+# the same ticker (Hengrui, which triggers daily), nearly all on outflow days -- ZERO
+# samples of "main-force still positive but fading intraday", which is exactly the case
+# the user asked about. Cannot backtest a question the data never covers.
+# Fix: sample EVERY watched ticker at 4 fixed clock points so the dataset is uniform.
+# Cost is low (one flow call per ticker, ~19 tickers x 4 = 76 calls/day).
+# Marked src:'snap' in the jsonl so future backtests can separate uniform vs trigger samples.
+if (-not $Test) {
+    $hmS = (Get-Date).Hour * 100 + (Get-Date).Minute
+    $slot = if ($hmS -ge 1445) { '1445' } elseif ($hmS -ge 1330) { '1330' } elseif ($hmS -ge 1030) { '1030' } elseif ($hmS -ge 945) { '0945' } else { '' }
+    if ($slot -and $snapMark -ne "$today/$slot") {
+        $snapJs = Join-Path $root 'scripts\snapshot.js'
+        if (Test-Path $snapJs) { try { & node $snapJs | Out-Null } catch {} }
+        $snapMark = "$today/$slot"
     }
 }
 
@@ -285,7 +305,7 @@ if ($crashGate) { $crashMode = $true }
 elseif ($crashMode -and $avgIdx -ge 0.8 -and (@($idxPct | Where-Object { $_ -gt 0 }).Count -ge 2)) { $allClear = $true; $crashMode = $false }
 
 # Persist state FIRST (before any blocking popup) so overlapping runs dedup correctly.
-@{ date = $today; armed = $armed; passed = $passed; arm = $armMark; crashMode = $crashMode } | ConvertTo-Json -Compress | Out-File -FilePath $stateFile -Encoding utf8
+@{ date = $today; armed = $armed; passed = $passed; arm = $armMark; snap = $snapMark; crashMode = $crashMode } | ConvertTo-Json -Compress | Out-File -FilePath $stateFile -Encoding utf8
 
 # Market crashing (3-idx avg <= -1.5%) -> silence BUY/pullback alerts (all knives in a crash). Log once, no popup.
 # v2.6 fix: a crash is EXACTLY when a stop-loss must still ping -> SELL/STOP alerts (sell=true) are NOT silenced.

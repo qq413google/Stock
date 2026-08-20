@@ -1,6 +1,6 @@
 {
   "_comment": "自动布防生成(scripts/arm-alerts.js)。每日开盘前重跑刷新。标 manual:true 的条目会被保留。触发=价位到了,买不买仍须过 v2.0 全闸门。",
-  "_generated": "2026-08-20 09:31 (北京)",
+  "_generated": "2026-08-20 13:31 (北京)",
   "alerts": [
     {
       "name": "沪电股份",
@@ -18,7 +18,7 @@
       "name": "恒瑞医药",
       "tencent": "sh600276",
       "op": "<=",
-      "price": 53.85,
+      "price": 53.75,
       "msg": "回踩MA10(54.53)缩量企稳 - 7/10测箱体上沿(57.77)未破,非追高;等回踩确认,止损前低支撑下方",
       "enabled": true,
       "manual": true,
@@ -29,7 +29,7 @@
       "name": "药明康德",
       "tencent": "sh603259",
       "op": "<=",
-      "price": 164.23,
+      "price": 163.96,
       "msg": "回踩MA10(122.38)缩量企稳 - 7/10已反弹3日(115→125+),不追高;等回踩不破再进,资金面7/9前方向反复需再确认",
       "enabled": true,
       "manual": true,
@@ -40,8 +40,8 @@
       "name": "工业富联",
       "tencent": "sh601138",
       "op": ">",
-      "price": 62.67,
-      "msg": "站回MA20(62.67) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 62.66,
+      "msg": "站回MA20(62.66) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -57,21 +57,11 @@
       "rebound": true
     },
     {
-      "name": "通富微电",
-      "tencent": "sz002156",
-      "op": ">",
-      "price": 63.38,
-      "msg": "站回MA20(63.38) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
-    },
-    {
       "name": "三花智控",
       "tencent": "sz002050",
       "op": ">",
-      "price": 37.83,
-      "msg": "站回MA20(37.83) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 37.8,
+      "msg": "站回MA20(37.80) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -80,8 +70,8 @@
       "name": "浙江荣泰",
       "tencent": "sh603119",
       "op": ">",
-      "price": 50.93,
-      "msg": "站回MA20(50.93) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 50.92,
+      "msg": "站回MA20(50.92) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -90,8 +80,8 @@
       "name": "西部材料",
       "tencent": "sz002149",
       "op": ">",
-      "price": 37.4,
-      "msg": "站回MA20(37.40) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 37.38,
+      "msg": "站回MA20(37.38) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -100,8 +90,8 @@
       "name": "神剑股份",
       "tencent": "sz002361",
       "op": ">",
-      "price": 10.91,
-      "msg": "站回MA20(10.91) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 10.9,
+      "msg": "站回MA20(10.90) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -109,35 +99,45 @@
     {
       "name": "康龙化成",
       "tencent": "sz300759",
+      "op": "<=",
+      "price": 44.7,
+      "msg": "回踩至MA20上沿(44.70) 突破买候选(v2.16研究U):近5日创20日新高后回踩,缩量不破MA20(43.40)+主力净流入再确认。⚠️破MA20则形态失效",
+      "enabled": true,
+      "confirm": true,
+      "breakout": true
+    },
+    {
+      "name": "康龙化成",
+      "tencent": "sz300759",
       "op": ">",
-      "price": 48.89,
-      "msg": "反弹收复MA10(48.89) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 48.74,
+      "msg": "反弹收复MA10(48.74) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     },
     {
       "name": "泰格医药",
       "tencent": "sz300347",
-      "op": ">",
-      "price": 51.96,
-      "msg": "反弹收复MA20(51.96) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
-      "enabled": true
+      "op": "<=",
+      "price": 53.6,
+      "msg": "回踩至MA20上沿(53.60) 突破买候选(v2.16研究U):近5日创20日新高后回踩,缩量不破MA20(52.04)+主力净流入再确认。⚠️破MA20则形态失效",
+      "enabled": true,
+      "confirm": true,
+      "breakout": true
     },
     {
       "name": "工商银行",
       "tencent": "sh601398",
       "op": ">",
-      "price": 7.72,
-      "msg": "站回MA20(7.72) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
-      "enabled": true,
-      "confirm": true,
-      "rebound": true
+      "price": 7.62,
+      "msg": "反弹收复MA10(7.62) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "enabled": true
     },
     {
-      "name": "比亚迪",
-      "tencent": "sz002594",
+      "name": "亿纬锂能",
+      "tencent": "sz300014",
       "op": ">",
-      "price": 91.31,
-      "msg": "站回MA20(91.31) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 55.18,
+      "msg": "站回MA20(55.18) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -145,25 +145,35 @@
     {
       "name": "中国稀土",
       "tencent": "sz000831",
+      "op": "<=",
+      "price": 55.34,
+      "msg": "回踩至MA20上沿(55.34) 突破买候选(v2.16研究U):近5日创20日新高后回踩,缩量不破MA20(53.73)+主力净流入再确认。⚠️破MA20则形态失效",
+      "enabled": true,
+      "confirm": true,
+      "breakout": true
+    },
+    {
+      "name": "中国稀土",
+      "tencent": "sz000831",
       "op": ">",
-      "price": 58.98,
-      "msg": "反弹收复MA10(58.98) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 53.73,
+      "msg": "反弹收复MA20(53.73) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     },
     {
       "name": "四川黄金",
       "tencent": "sz001337",
       "op": ">",
-      "price": 48.01,
-      "msg": "反弹收复MA10(48.01) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 47.81,
+      "msg": "反弹收复MA10(47.81) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     },
     {
       "name": "中信证券",
       "tencent": "sh600030",
       "op": ">",
-      "price": 27.89,
-      "msg": "站回MA20(27.89) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 27.88,
+      "msg": "站回MA20(27.88) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -172,8 +182,8 @@
       "name": "中国平安",
       "tencent": "sh601318",
       "op": ">",
-      "price": 53.34,
-      "msg": "站回MA20(53.34) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "price": 53.36,
+      "msg": "站回MA20(53.36) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
       "enabled": true,
       "confirm": true,
       "rebound": true
@@ -181,19 +191,39 @@
     {
       "name": "中国神华",
       "tencent": "sh601088",
+      "op": "<=",
+      "price": 46.15,
+      "msg": "回踩至MA20上沿(46.15) 突破买候选(v2.16研究U):近5日创20日新高后回踩,缩量不破MA20(44.80)+主力净流入再确认。⚠️破MA20则形态失效",
+      "enabled": true,
+      "confirm": true,
+      "breakout": true
+    },
+    {
+      "name": "中国神华",
+      "tencent": "sh601088",
       "op": ">",
-      "price": 44.97,
-      "msg": "反弹收复MA10(44.97) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 44.98,
+      "msg": "反弹收复MA10(44.98) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
     },
     {
       "name": "紫金矿业",
       "tencent": "sh601899",
       "op": ">",
-      "price": 33.58,
-      "msg": "反弹收复MA10(33.58) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
+      "price": 33.6,
+      "msg": "反弹收复MA10(33.6) 低吸观察:缩量企稳+主力净流入再确认(非追高)",
       "enabled": true
+    },
+    {
+      "name": "长江电力",
+      "tencent": "sh600900",
+      "op": ">",
+      "price": 28.39,
+      "msg": "站回MA20(28.39) 超跌反包候选:主力净占比≥+10%+缩量 再轻仓(confirm自动判)",
+      "enabled": true,
+      "confirm": true,
+      "rebound": true
     }
   ],
-  "_posarmed": "2026-08-20 09:31 (北京)"
+  "_posarmed": "2026-08-20 13:31 (北京)"
 }

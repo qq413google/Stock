@@ -30,7 +30,11 @@ function appendSnapshot(rec) {
     fs.appendFileSync(cacheFile(), JSON.stringify(rec) + '\n');
   } catch { /* 缓存写入失败不影响主流程 */ }
 }
-function cleanOldCache(keepDays = 14) {
+// 2026-08-20: 保留期 14→120 天。原因：snapshot.js 开始做均匀采样后，cache/intraday 从
+// "临时对比缓存"变成了**回测数据源**（用于验证「主力仍为正但盘中衰减」这类问题）。
+// 14天会把刚攒的样本删掉——研究需要数月积累，删了就永远测不了。
+// 120天 ≈ 半年交易日，19只×4次/天 ≈ 每天76条、每年约1.8万条，磁盘占用可忽略。
+function cleanOldCache(keepDays = 120) {
   try {
     const files = fs.readdirSync(CACHE_DIR);
     const cutoff = Date.now() - keepDays * 24 * 3600 * 1000;
@@ -207,9 +211,19 @@ async function getJson(u) {
   console.log(`${f5mark} 趋势: ${f5txt} (仅提醒,不改判)`);
 
   // 当日早晚对比: 读本地缓存里今天该股更早的快照, 跟本次比(超大单比主力合计更能看出是不是真在跑)
+  // 2026-08-20 升级：用户提出「早盘主力+2亿、下午变+1亿，累计仍为正，这种怎么算」——
+  // 指出了真盲区：**闸门只看存量(main>0)，完全不看流量(在变好还是变坏)**。
+  // 此前本段只 console.log 打印，verdict 完全不引用它，警告等于印在旁边没人看。
+  // 现改为：算出衰减幅度存入 fadeWarn，**写进结论行 tip**，让人工判断时无法忽略。
+  // ⚠️ [逻辑推演·未验证] **不改 verdict** —— 现有 intraday 样本仅31个股票日、
+  //   且事件驱动采样严重偏斜(12个是恒瑞流出日)，「主力仍为正但盘中衰减」的样本数为 0，
+  //   无法定出"衰减多少算危险"的阈值。硬拍一个数就是重蹈 v2.8 保本位止损的覆辙。
+  //   待 cache/intraday 攒够均匀样本后回测，再决定要不要升级为闸门。
+  let fadeWarn = null;
   const prior = readTodaySnapshots(secid);
   if (prior.length && main !== null) {
-    const last = prior[prior.length - 1];
+    const first = prior[0];                                   // 当日最早一条，看全天趋势
+    const last = prior[prior.length - 1];                     // 上一次，看最近变化
     const lastTime = last.time || '早前';
     if (last.main !== null && last.main !== undefined) {
       const trend = main > last.main + 0.3 ? '好转' : main < last.main - 0.3 ? '恶化' : '持平';
@@ -220,6 +234,17 @@ async function getJson(u) {
       }
       console.log(`[对比] 较上次(${lastTime}) 主力${last.main.toFixed(2)}→${main.toFixed(2)}亿(${trend})${supTxt}, 今日已有${prior.length}条快照`);
     }
+    // 全天峰值 → 现值的衰减（用户问的正是这个：+2亿 → +1亿）
+    const peakMain = Math.max(...prior.map(x => (typeof x.main === 'number' ? x.main : -Infinity)), main);
+    if (peakMain > 0.3 && main > 0 && main < peakMain) {
+      const fadePct = (1 - main / peakMain) * 100;
+      if (fadePct >= 25) {                                    // 25%只是"值得说一句"的显示门槛,非闸门阈值
+        const peakRec = prior.find(x => x.main === peakMain);
+        fadeWarn = `主力较当日峰值${peakMain.toFixed(2)}亿(${peakRec ? peakRec.time : '早前'})衰减${fadePct.toFixed(0)}%至${main.toFixed(2)}亿——**累计仍为正但在往回退**`;
+        console.log(`[⚠️流量] ${fadeWarn}`);
+        console.log(`         (存量闸门只看 main>0 已放行；此项为[逻辑推演·未验证]提示，不改判定)`);
+      }
+    }
   }
   // 写入本次快照供下次对比
   appendSnapshot({
@@ -227,6 +252,7 @@ async function getJson(u) {
     price, main, superL, largeL, todayRatio, volRatio, verdict,
   });
 
+  const fadeSuffix = fadeWarn ? `  ⚠️但${fadeWarn}，下单前务必现拉 flow.js 复核方向` : '';
   const tip = verdict === 'PASS' ? (reboundBuy ? '超跌反包候选(站回MA20+主力净占比≥10%+分时企稳) -> 轻仓试,找我定手数/止损' : '顺势三项通过+贴近MA10+分时企稳 -> 可考虑,找我定手数/止损/盈亏比')
     : verdict === 'FAIL' ? '主力流出或破MA10 -> 别接,放弃今天'
     : verdict === 'ERR' ? '数据拉取失败 -> 找我手动确认'
@@ -236,8 +262,8 @@ async function getJson(u) {
     : (downtrend3 && !reboundBuy && main > 0 && bull) ? '近3日连跌破位型,均线多头是滞后假象 -> 非回踩,别接'
     : (!reboundBuy && main > 0 && bull && !atBuyPoint) ? `三项本身通过，但现价离MA10${nearMa10 ? '' : '偏远'}/止损距离${validStopDist ? '' : '过宽'}，不是真正回踩点，追高风险大 -> 等回踩MA10再看`
     : '未全过/放量 -> 谨慎,建议找我人工判断';
-  console.log(`结论: ${tip}`);
+  console.log(`结论: ${tip}${fadeSuffix}`);
   // ASCII 兜底两行（编码异常也可读，且供 PowerShell 解析）
-  console.log(`SUMMARY main=${main === null ? 'NA' : main.toFixed(2)} vol=${volRatio.toFixed(2)} holdMA10=${cMa10 ? 'Y' : 'N'} bull=${bull ? 'Y' : 'N'} rsi=${rsi === null ? 'NA' : rsi.toFixed(0)} ratio=${todayRatio === null ? 'NA' : todayRatio.toFixed(1)} rebound=${reboundBuy ? 'Y' : 'N'} sum5=${sum5 === null ? 'NA' : sum5.toFixed(1)} worst=${worst === null ? 'NA' : worst.toFixed(1)} recover=${recovering ? 'Y' : 'N'} streak=${streak} nearMa10=${nearMa10 ? 'Y' : 'N'} stopDist=${(stopDist * 100).toFixed(1)} st=${intra === null ? 'NA' : intra.stab ? 'Y' : 'N'} dt3=${downtrend3 ? 'Y' : 'N'} noise=${noiseCapped ? 'Y' : 'N'}`);
+  console.log(`SUMMARY main=${main === null ? 'NA' : main.toFixed(2)} vol=${volRatio.toFixed(2)} holdMA10=${cMa10 ? 'Y' : 'N'} bull=${bull ? 'Y' : 'N'} rsi=${rsi === null ? 'NA' : rsi.toFixed(0)} ratio=${todayRatio === null ? 'NA' : todayRatio.toFixed(1)} rebound=${reboundBuy ? 'Y' : 'N'} sum5=${sum5 === null ? 'NA' : sum5.toFixed(1)} worst=${worst === null ? 'NA' : worst.toFixed(1)} recover=${recovering ? 'Y' : 'N'} streak=${streak} nearMa10=${nearMa10 ? 'Y' : 'N'} stopDist=${(stopDist * 100).toFixed(1)} st=${intra === null ? 'NA' : intra.stab ? 'Y' : 'N'} dt3=${downtrend3 ? 'Y' : 'N'} noise=${noiseCapped ? 'Y' : 'N'} fade=${fadeWarn ? 'Y' : 'N'}`);
   console.log(`VERDICT: ${verdict} (${passN}/3)`);
 })();
